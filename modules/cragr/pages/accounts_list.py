@@ -87,7 +87,6 @@ class AccountsList(CragrBasePage):
         """
             Returns the list of available bank accounts
         """
-        l = []
         for div in self.document.getiterator('div'):
             if div.attrib.get('class', '') in ('dv', 'headline') and div.getchildren()[0].tag in ('a', 'br'):
                 self.logger.debug("Analyzing div %s" % div)
@@ -126,8 +125,10 @@ class AccountsList(CragrBasePage):
                     if first_link is not None:
                         account._link_id = first_link.get('href')
                         self.logger.debug('  the history link appears to be %s' % account._link_id)
-                    l.append(account)
-        return l
+                    else:
+                        account._link_id = None
+
+                    yield account
 
     def get_history(self, start_index=0, start_offset=0):
         """

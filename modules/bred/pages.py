@@ -33,8 +33,8 @@ __all__ = ['LoginPage', 'LoginResultPage', 'AccountsPage', 'TransactionsPage', '
 class LoginPage(BasePage):
     def login(self, login, passwd):
         self.browser.select_form(name='authen')
-        self.browser['id'] = login
-        self.browser['pass'] = passwd
+        self.browser['id'] = login.encode(self.browser.ENCODING)
+        self.browser['pass'] = passwd.encode(self.browser.ENCODING)
         self.browser.submit(nologin=True)
 
 class LoginResultPage(BasePage):
@@ -124,15 +124,15 @@ class Transaction(FrenchTransaction):
                 (re.compile('^REMISE (?P<text>.*)'),        FrenchTransaction.TYPE_DEPOSIT),
                 (re.compile('^(?P<text>.*)( \d+)? QUITTANCE .*'),
                                                             FrenchTransaction.TYPE_ORDER),
+                (re.compile('^CB PAIEM. EN \d+ FOIS \d+ (?P<text>.*?) LE .* LE (?P<dd>\d{2})/(?P<mm>\d{2})/(?P<yy>\d{2})$'),
+                                                            FrenchTransaction.TYPE_CARD),
                 (re.compile('^.* LE (?P<dd>\d{2})/(?P<mm>\d{2})/(?P<yy>\d{2})$'),
                                                             FrenchTransaction.TYPE_UNKNOWN),
                ]
 
 
 class TransactionsPage(BasePage):
-    def get_history(self):
-        is_coming = None
-
+    def get_history(self, is_coming=None):
         for tr in self.document.xpath('//div[@class="scrollTbody"]/table//tr'):
             cols = tr.findall('td')
 
