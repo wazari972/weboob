@@ -172,6 +172,7 @@ class Boobank(ReplApplication):
                            'transfer':    'transfer',
                            'history':     'ops_list',
                            'coming':      'ops_list',
+                           'debug':       'ops_list'
                           }
     COLLECTION_OBJECTS = (Account, Transaction, )
 
@@ -181,6 +182,10 @@ class Boobank(ReplApplication):
 
         return [s for s in self._complete_object() if s != exclude]
 
+    def do_debug(self, notused):
+        import pdb;pdb.set_trace()
+        print "debugged"
+    
     def do_list(self, line):
         """
         list
