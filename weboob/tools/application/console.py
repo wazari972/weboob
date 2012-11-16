@@ -487,7 +487,8 @@ class ConsoleApplication(BaseApplication):
             print >>sys.stderr, u'FATAL(%s): ' % backend.name + self.BOLD + '/!\ SERVER CERTIFICATE IS INVALID /!\\' + self.NC
         else:
             print >>sys.stderr, u'Bug(%s): %s' % (backend.name, to_unicode(error))
-
+            print >>sys.stderr, backtrace
+            
             minfo = self.weboob.repositories.get_module_info(backend.NAME)
             if minfo and not minfo.is_local():
                 self.weboob.repositories.update_repositories()
