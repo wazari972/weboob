@@ -317,8 +317,11 @@ class Repository(object):
             for f in files:
                 if f.endswith('.pyc'):
                     continue
-                m = int(datetime.fromtimestamp(os.path.getmtime(os.path.join(root, f))).strftime('%Y%m%d%H%M'))
-                mtime = max(mtime, m)
+                try:
+                   m = int(datetime.fromtimestamp(os.path.getmtime(os.path.join(root, f))).strftime('%Y%m%d%H%M'))
+                   mtime = max(mtime, m)
+                except e:
+                   pass
 
         return mtime
 
