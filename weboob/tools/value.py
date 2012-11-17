@@ -80,7 +80,7 @@ class Value(object):
         if v == '' and self.default != '':
             raise ValueError('Value can\'t be empty')
         if self.regexp is not None and not re.match(self.regexp, unicode(v)):
-            raise ValueError('Value "%s" does not match regexp "%s"' % (v, self.regexp))
+            import pdb;pdb.set_trace();raise ValueError('Value "%s" does not match regexp "%s"' % (v, self.regexp))
         if self.choices is not None and not v in self.choices.iterkeys():
             raise ValueError('Value "%s" is not in list: %s' % (
                 v, ', '.join(unicode(s) for s in self.choices.iterkeys())))
