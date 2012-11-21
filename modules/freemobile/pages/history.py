@@ -24,7 +24,6 @@ from decimal import Decimal
 from weboob.tools.browser import BasePage
 from weboob.capabilities.bill import Detail, Bill
 
-import re
 
 __all__ = ['HistoryPage', 'DetailsPage']
 
@@ -43,7 +42,7 @@ class DetailsPage(BasePage):
     def on_loaded(self):
         self.details = {}
         self.datebills = []
-        for div in self.document.xpath('//div[@class="infosLigneDetail pointer"]'):
+        for div in self.document.xpath('//div[@class="infosLigne pointer"]'):
             phonenumber = div.text
             phonenumber = phonenumber.split("-")[-1].strip()
             virtualnumber = div.attrib['onclick'].split('(')[1][1]
@@ -61,7 +60,8 @@ class DetailsPage(BasePage):
             divint = div.xpath('div[@class="international hide"]')[0]
             self.parse_div(divint, u"Appels émis : %s | Appels reçus : %s", num, True)
 
-        for trbill in self.document.xpath('//tr[@class="derniereFacture"]'):
+        divbill = self.document.xpath('//div[@class="facture"]')[0]
+        for trbill in divbill.xpath('table/tr'):
             mydate = unicode(trbill.find('td').text.split(":")[1].strip())
             bill = Bill()
             bill.label = unicode(mydate)
@@ -90,22 +90,22 @@ class DetailsPage(BasePage):
         for div in divs:
             detail = Detail()
 
-            detail.label = unicode(div.find('div[@class="titreDetail"]/p').text_content())
+            detail.label = unicode(div.find('div[@class="titre"]/p').text_content())
             if inter:
                 detail.label = detail.label + u" (international)"
-            detail.infos = unicode(div.find('div[@class="consoDetail"]/p').text_content().lstrip())
+            detail.infos = unicode(div.find('div[@class="conso"]/p').text_content().lstrip())
             detail.price = convert_price(div)
 
             self.details[num].append(detail)
 
     def parse_voice(self, div, string, inter=False):
         voice = Detail()
-        voice.label = unicode(div.find('div[@class="titreDetail"]/p').text_content())
+        voice.label = unicode(div.find('div[@class="titre"]/p').text_content())
         if inter:
             voice.label = voice.label + " (international)"
         voice.price = convert_price(div)
-        voice1 = div.xpath('div[@class="consoDetail"]/p/span')[0].text
-        voice2 = div.xpath('div[@class="consoDetail"]/p/span')[1].text
+        voice1 = div.xpath('div[@class="conso"]/p/span')[0].text
+        voice2 = div.xpath('div[@class="conso"]/p/span')[1].text
         voice.infos = unicode(string) % (voice1, voice2)
 
         return voice
@@ -126,15 +126,14 @@ class HistoryPage(BasePage):
 
     def on_loaded(self):
         self.calls = []
-        isdate = re.compile('[0-3][0-9]/[0-1][0-9]/2[0-9][0-9][0-9] [0-2][0-9]:[0-6][0-9]:[0-6][0-9]')
         for tr in self.document.xpath('//tr'):
             tds = tr.xpath('td')
-            if tds[0].text == None or tds[0].text == "Date" or not isdate.match(tds[0].text):
+            if tds[0].text == None or tds[0].text == "Date":
                 pass
             else:
                 detail = Detail()
                 mydate = date(*reversed([int(x) for x in tds[0].text.split(' ')[0].split("/")]))
-                mytime = time(*[int(x) for x in tds[0].text.split(' ')[1].split(":")])
+                mytime = time(*[int(x) for x in tds[0].text.split(' ')[2].split(":")])
                 detail.datetime = datetime.combine(mydate, mytime)
                 detail.label = u' '.join([unicode(td.text.strip()) for td in tds[1:4] if td.text is not None])
                 try:
