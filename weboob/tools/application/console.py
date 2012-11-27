@@ -27,6 +27,7 @@ import os
 import locale
 from tempfile import NamedTemporaryFile
 from ssl import SSLError
+from threading import Lock
 
 from weboob.capabilities import UserError
 from weboob.capabilities.account import ICapAccount, Account, AccountRegisterError
@@ -59,7 +60,8 @@ class ConsoleApplication(BaseApplication):
     """
 
     CAPS = None
-
+    mutex = Lock()
+    
     # shell escape strings
     if sys.platform == 'win32':
         #workaround to disable bold
@@ -405,37 +407,38 @@ class ConsoleApplication(BaseApplication):
             question = u'%s (hidden input)' % question
 
         question += ': '
-
-        while True:
-            if v.masked:
-                if sys.platform == 'win32':
-                    line = getpass.getpass(str(question))
+        
+        with self.mutex:
+            while True:
+                if v.masked:
+                    if sys.platform == 'win32':
+                        line = getpass.getpass(str(question))
+                    else:
+                        line = getpass.getpass(question)
                 else:
-                    line = getpass.getpass(question)
-            else:
-                self.stdout.write(question.encode(sys.stdout.encoding or locale.getpreferredencoding()))
-                self.stdout.flush()
-                line = self.stdin.readline()
-                if len(line) == 0:
-                    raise EOFError()
+                    self.stdout.write(question.encode(sys.stdout.encoding or locale.getpreferredencoding()))
+                    self.stdout.flush()
+                    line = self.stdin.readline()
+                    if len(line) == 0:
+                        raise EOFError()
+                    else:
+                        line = line.rstrip('\r\n')
+
+                if not line and v.default is not None:
+                    line = v.default
+                if isinstance(line, str):
+                    line = line.decode('utf-8')
+
+                if line in aliases:
+                    line = aliases[line]
+
+                try:
+                    v.set(line)
+                except ValueError, e:
+                    print >>sys.stderr, u'Error: %s' % e
                 else:
-                    line = line.rstrip('\r\n')
-
-            if not line and v.default is not None:
-                line = v.default
-            if isinstance(line, str):
-                line = line.decode('utf-8')
-
-            if line in aliases:
-                line = aliases[line]
-
-            try:
-                v.set(line)
-            except ValueError, e:
-                print >>sys.stderr, u'Error: %s' % e
-            else:
-                break
-
+                    break
+            
         return v.get()
 
     def acquire_input(self, content=None):
