@@ -60,7 +60,6 @@ class ConsoleApplication(BaseApplication):
     """
 
     CAPS = None
-    mutex = Lock()
     
     # shell escape strings
     if sys.platform == 'win32':
@@ -408,6 +407,17 @@ class ConsoleApplication(BaseApplication):
 
         question += ': '
         
+        def coucou():
+            print "hello"
+            return "world"
+        import pdb;pdb.set_trace()
+        import weboob.core.bcall
+        
+        bcall = weboob.core.bcall.BackendsCall(self.enabled_backends, None,coucou)
+        
+        for var in bcall:
+            print var 
+            
         with self.mutex:
             while True:
                 if v.masked:

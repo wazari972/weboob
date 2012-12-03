@@ -106,8 +106,10 @@ class BackendsCall(object):
             try:
                 # Call method on backend
                 try:
+                    print "Calling"
                     self.logger.debug('%s: Calling function %s' % (backend, function))
                     if callable(function):
+                        print "Callable"
                         result = function(backend, *args, **kwargs)
                     else:
                         result = getattr(backend, function)(*args, **kwargs)
