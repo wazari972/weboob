@@ -70,6 +70,7 @@ class AccountsPage(LoggedPage, HTMLPage):
             obj_id = CleanText('.//ul[@class="nClient"]/li[last()]', symbols=u'N°')
             obj_type = AddType(CleanText('.//h2[@class="tt_compte"][1]'))
             obj_balance = CleanDecimal('.//td[@class="sum_solde"]//span[last()]', replace_dots=True)
+            obj_coming = CleanDecimal('.//tr[@class="nn_border"]/td[@class="result rightBorder"]/a', replace_dots=True, default="0")
             obj_currency = u'EUR'
 
 
