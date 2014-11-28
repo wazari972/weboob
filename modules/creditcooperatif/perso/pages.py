@@ -72,7 +72,19 @@ class AccountsPage(LoggedPage, HTMLPage):
             obj_balance = CleanDecimal('.//td[@class="sum_solde"]//span[last()]', replace_dots=True)
             obj_coming = CleanDecimal('.//tr[@class="nn_border"]/td[@class="result rightBorder"]/a', replace_dots=True, default="0")
             obj_currency = u'EUR'
+            
+class EncoursCBPage(LoggedPage, HTMLPage):
+    @method
+    class get_list(ListElement):
+        item_xpath = '//table[has-class("table-encourscb")][caption]'
 
+        class item(ItemElement):
+            klass = Account
+            obj_label = CleanText('./caption') # or .//form[@id="creditCardDTO"]/input[@id="porteur"]/@value
+            obj_id = CleanText('.//form[@id="creditCardDTO"]/input[@id="numero"]/@value', symbols=u'N°')
+            obj_type = Account.TYPE_LOAN
+            obj_coming = CleanDecimal('.//form[@id="creditCardDTO"]/input[@id="montantTotal"]/@value', replace_dots=True, sign=(lambda x: -1))
+            obj_currency = u'EUR'
 
 class Transaction(FrenchTransaction):
     PATTERNS = [(re.compile('^(?P<text>RETRAIT DAB) (?P<dd>\d{2})-(?P<mm>\d{2})-([\d\-]+)'),

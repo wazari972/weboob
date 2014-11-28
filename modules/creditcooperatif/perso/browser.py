@@ -20,7 +20,7 @@
 from weboob.browser import LoginBrowser, URL, need_login
 from weboob.exceptions import BrowserIncorrectPassword
 
-from .pages import LoginPage, CreditLoggedPage, AccountsPage, TransactionsPage, TransactionsJSONPage, ComingTransactionsPage
+from .pages import LoginPage, CreditLoggedPage, AccountsPage, TransactionsPage, TransactionsJSONPage, ComingTransactionsPage, EncoursCBPage
 
 
 __all__ = ['CreditCooperatif']
@@ -35,6 +35,7 @@ class CreditCooperatif(LoginBrowser):
     transactionpage = URL('/portail/particuliers/mescomptes/relevedesoperations.do', TransactionsPage)
     transactjsonpage = URL('/portail/particuliers/mescomptes/relevedesoperationsjson.do', TransactionsJSONPage)
     comingpage = URL('/portail/particuliers/mescomptes/synthese/operationsencourslien.do', ComingTransactionsPage)
+    encourscbpage = URL('/portail/particuliers/mescomptes/synthese/encourscblien.do', EncoursCBPage)
 
     def do_login(self):
         """
@@ -56,9 +57,19 @@ class CreditCooperatif(LoginBrowser):
 
     @need_login
     def get_accounts_list(self):
+        accounts = []
         self.accountspage.stay_or_go()
 
-        return self.page.get_list()
+        for account in self.page.get_list():
+            accounts.append(account)
+
+            data = {'accountExternalNumber': account.id}
+            self.encourscbpage.go(data=data)
+            accounts += self.page.get_list()
+            
+        return accounts
+        
+        
 
     @need_login
     def get_history(self, account):
