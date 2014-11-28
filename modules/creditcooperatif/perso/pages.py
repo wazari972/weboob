@@ -138,6 +138,14 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
 
             txt = txt[start+len(pattern):start+txt[start:].find(';')]
             data = json.loads(txt)
+            
+            # credit card purchases entry contains a link, remove it
+            for entry in data:
+                if "</a>" not in entry[1]:
+                    continue
+                entry[1] = entry[1].split(">")[1]\
+                    .split("<")[0]\
+                    .strip()
             break
 
         for tr in data:
