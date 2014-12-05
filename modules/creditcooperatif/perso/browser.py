@@ -20,7 +20,7 @@
 from weboob.browser import LoginBrowser, URL, need_login
 from weboob.exceptions import BrowserIncorrectPassword
 
-from .pages import LoginPage, CreditLoggedPage, AccountsPage, TransactionsPage, TransactionsJSONPage, ComingTransactionsPage, EncoursCBPage
+from .pages import LoginPage, CreditLoggedPage, AccountsPage, TransactionsPage, TransactionsJSONPage, ComingTransactionsPage, EncoursCBPage, ComingCBTransactionsPage
 
 
 __all__ = ['CreditCooperatif']
@@ -36,6 +36,7 @@ class CreditCooperatif(LoginBrowser):
     transactjsonpage = URL('/portail/particuliers/mescomptes/relevedesoperationsjson.do', TransactionsJSONPage)
     comingpage = URL('/portail/particuliers/mescomptes/synthese/operationsencourslien.do', ComingTransactionsPage)
     encourscbpage = URL('/portail/particuliers/mescomptes/synthese/encourscblien.do', EncoursCBPage)
+    comingcbpage = URL('/portail/particuliers/mescomptes/encourscb/detail.do', ComingCBTransactionsPage)
 
     def do_login(self):
         """
@@ -64,18 +65,29 @@ class CreditCooperatif(LoginBrowser):
             accounts.append(account)
 
             data = {'accountExternalNumber': account.id}
-            self.encourscbpage.go(data=data)
-            accounts += self.page.get_list()
             
+            if int(account._has_encours) != 0:
+                self.comingpage.go(data=data)
+                account.coming = sum([coming_tr.amount for coming_tr 
+                                      in self.page.get_transactions()])
+            
+            if len(account._has_cb) != 0:
+                self.encourscbpage.go(data=data)
+                accounts += self.page.get_list()
+                
         return accounts
         
         
 
     @need_login
     def get_history(self, account):
+        if account._credit_card_account:
+            return []
+        
         data = {'accountExternalNumber': account.id}
-        self.transactionpage.go(data=data)
 
+        self.transactionpage.go(data=data)
+        
         data = {'iDisplayLength':  400,
                 'iDisplayStart':   0,
                 'iSortCol_0':      0,
@@ -85,14 +97,19 @@ class CreditCooperatif(LoginBrowser):
                 'sSortDir_0':      'asc',
                 }
         self.transactjsonpage.go(data=data)
-
+        
         return self.page.get_transactions()
 
     @need_login
     def get_coming(self, account):
-        data = {'accountExternalNumber': account.id}
-        self.comingpage.go(data=data)
-
-        assert self.comingpage.is_here()
-
+        if not account._credit_card_account:
+            data = {'accountExternalNumber': account.id}
+            self.comingpage.go(data=data)
+            assert self.comingpage.is_here()
+        else:
+            data = {'accountExternalNumber': "41011070318"}
+            self.encourscbpage.go(data=data)
+            data = {'numero': account.id}
+            self.comingcbpage.go(data=data)
+            
         return self.page.get_transactions()
