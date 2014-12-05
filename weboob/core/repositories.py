@@ -34,7 +34,7 @@ from io import BytesIO
 from weboob.exceptions import BrowserHTTPError, BrowserHTTPNotFound
 from .modules import LoadedModule
 from weboob.tools.log import getLogger
-from weboob.tools.misc import to_unicode
+from weboob.tools.misc import get_backtrace, to_unicode
 try:
     from ConfigParser import RawConfigParser, DEFAULTSECT
 except ImportError:
@@ -120,6 +120,7 @@ class Repository(object):
         self.local = None
         self.signed = False
         self.key_update = 0
+        self.logger = getLogger('repository')
 
         self.modules = {}
 
@@ -284,6 +285,7 @@ class Repository(object):
                         fp.close()
             except Exception as e:
                 print('Unable to build module %s: [%s] %s' % (name, type(e).__name__, e), file=sys.stderr)
+                self.logger.debug(get_backtrace(e))
             else:
                 m = ModuleInfo(module.name)
                 m.version = self.get_tree_mtime(module_path)
@@ -763,7 +765,7 @@ class Keyring(object):
             return os.getenv('GPGV_EXECUTABLE')
         paths = os.getenv('PATH', os.defpath).split(os.pathsep)
         for path in paths:
-            for ex in ('gpgv2', 'gpgv'):
+            for ex in ('gpgv2', 'gpgv', 'gpgv2.exe', 'gpgv.exe'):
                 fpath = os.path.join(path, ex)
                 if os.path.exists(fpath) and os.access(fpath, os.X_OK):
                     return fpath
