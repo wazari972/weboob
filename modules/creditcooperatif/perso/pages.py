@@ -173,7 +173,9 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
         for tr in data:
             t = Transaction(0)
             text = tr[self.ROW_TEXT].replace("BANQUE EN LIGNE EN ATTENTE D EXECUTION", "(en attente)")
-            t.parse(tr[self.ROW_DATE], text)
+            # Json field DATA might be missing
+            date = tr[self.ROW_DATE] if tr[self.ROW_DATE] != tr[self.ROW_DEBIT] else None
+            t.parse(date, text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             yield t
                 
