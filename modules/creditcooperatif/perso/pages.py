@@ -70,9 +70,31 @@ class AccountsPage(LoggedPage, HTMLPage):
             obj_id = CleanText('.//ul[@class="nClient"]/li[last()]', symbols=u'N°')
             obj_type = AddType(CleanText('.//h2[@class="tt_compte"][1]'))
             obj_balance = CleanDecimal('.//td[@class="sum_solde"]//span[last()]', replace_dots=True)
+            obj_coming = None # will be set in Browser.CreditCooperatif.get_accounts_list
             obj_currency = u'EUR'
 
+            obj__credit_card_account = False
+            obj__has_cb = CleanText('.//tbody/tr[@class="nn_border"]//a', default='')
+            obj__has_encours = CleanDecimal('.//tbody/tr[@class="operations"]/td/a', replace_dots=True, default=0)
+            
+class EncoursCBPage(LoggedPage, HTMLPage):
+    @method
+    class get_list(ListElement):
+        item_xpath = '//table[has-class("table-encourscb")][caption]'
 
+        class item(ItemElement):
+            klass = Account
+            obj_label = CleanText('./caption') # or .//form[@id="creditCardDTO"]/input[@id="porteur"]/@value
+            obj_id = CleanText('.//form[@id="creditCardDTO"]/input[@id="numero"]/@value', symbols=u'N°')
+            obj_type = Account.TYPE_LOAN
+            def sign(x):
+                return 1 if x == "0,00" else -1
+            
+            obj_coming = CleanDecimal('.//form[@id="creditCardDTO"]/input[@id="montantTotal"]/@value', replace_dots=True, sign=sign)
+            obj_currency = u'EUR'
+
+            obj__credit_card_account = True
+            
 class Transaction(FrenchTransaction):
     PATTERNS = [(re.compile('^(?P<text>RETRAIT DAB) (?P<dd>\d{2})-(?P<mm>\d{2})-([\d\-]+)'),
                                                             FrenchTransaction.TYPE_WITHDRAWAL),
@@ -81,6 +103,8 @@ class Transaction(FrenchTransaction):
                 (re.compile('^CARTE (?P<dd>\d{2})(?P<mm>\d{2}) \d+ (?P<text>.*)'),
                                                             FrenchTransaction.TYPE_CARD),
                 (re.compile('^VIR COOPA (?P<dd>\d{2})/(?P<mm>\d{2}) (?P<text>.*)'),
+                                                            FrenchTransaction.TYPE_TRANSFER),
+                (re.compile('^SDD RECU (TRANSFRONTALIER|NATIONAL)? (?P<text>.*)'),
                                                             FrenchTransaction.TYPE_TRANSFER),
                 (re.compile('^VIR(EMENT|EMT| SEPA EMET :)? (?P<text>.*?)(- .*)?$'),
                                                             FrenchTransaction.TYPE_TRANSFER),
@@ -138,10 +162,48 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
 
             txt = txt[start+len(pattern):start+txt[start:].find(';')]
             data = json.loads(txt)
+            
+            # credit card COMING purchases entries contain a link,
+            # we don't want them in this list, they have an account
+            # on their own in Browser.CreditCooperatif.get_accounts_list
+            data = [entry for entry in data if "</a>" not in entry[1]]
+            
             break
 
         for tr in data:
             t = Transaction(0)
-            t.parse(tr[self.ROW_DATE], tr[self.ROW_TEXT])
+            text = tr[self.ROW_TEXT].replace("BANQUE EN LIGNE EN ATTENTE D EXECUTION", "(en attente)")
+            t.parse(tr[self.ROW_DATE], text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             yield t
+                
+class ComingCBTransactionsPage(LoggedPage, HTMLPage):
+    ROW_DATE =  0
+    ROW_TEXT =  1
+    ROW_DEBIT = 2
+    JSON_PREFIX = 'var jsonData1 ='
+    
+    def get_transactions(self):
+        data = []
+        for script in self.doc.xpath('//script'):
+            txt = script.text
+            if txt is None:
+                continue
+
+            start = txt.find(self.JSON_PREFIX)
+            if start < 0:
+                continue
+            
+            txt = txt[start+len(self.JSON_PREFIX)
+                      :start+txt[start:].find(';')]
+            data = json.loads(txt)
+                        
+            break
+
+        for tr in data:
+            t = Transaction(0)
+            text = tr[self.ROW_TEXT]
+            t.parse(tr[self.ROW_DATE], text)
+            t.set_amount(debit=tr[self.ROW_DEBIT])
+            yield t
+            
