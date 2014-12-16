@@ -133,7 +133,6 @@ class TransactionsJSONPage(LoggedPage, JsonPage):
 
     def get_transactions(self):
         seen = set()
-        import pdb;pdb.set_trace()
         for i, tr in enumerate(self.doc['exportData']):
             if i == 0:
                 continue
