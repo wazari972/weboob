@@ -206,6 +206,9 @@ class ComingCBTransactionsPage(LoggedPage, HTMLPage):
             t = Transaction(0)
             text = tr[self.ROW_TEXT]
             t.parse(tr[self.ROW_DATE], text)
-            t.set_amount(debit=tr[self.ROW_DEBIT])
+            if "+" in tr[self.ROW_DEBIT]:
+                t.set_amount(credit=tr[self.ROW_DEBIT])
+            else:
+                t.set_amount(debit=tr[self.ROW_DEBIT])
             yield t
             
