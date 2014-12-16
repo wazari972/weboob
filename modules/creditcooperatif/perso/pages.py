@@ -133,9 +133,23 @@ class TransactionsJSONPage(LoggedPage, JsonPage):
 
     def get_transactions(self):
         seen = set()
-        for tr in self.doc['exportData'][1:]:
+        import pdb;pdb.set_trace()
+        for i, tr in enumerate(self.doc['exportData']):
+            if i == 0:
+                continue
+            text = tr[self.ROW_TEXT]
+            
+            try:
+                # try to get the client transfer text,
+                # ignore if it fails
+                text += " (" + self.doc['aaData'][i][2]\
+                    .split(" Client : ")[1]\
+                    .split('\'')[0] + ")"
+            except IndexError:
+                pass
+            
             t = Transaction(0)
-            t.parse(tr[self.ROW_DATE], tr[self.ROW_TEXT])
+            t.parse(tr[self.ROW_DATE], text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             t.id = t.unique_id(seen)
             yield t
