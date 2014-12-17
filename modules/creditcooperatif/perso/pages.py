@@ -141,9 +141,11 @@ class TransactionsJSONPage(LoggedPage, JsonPage):
             try:
                 # try to get the client transfer text,
                 # ignore if it fails
-                text += " (" + self.doc['aaData'][i][2]\
+                label = " (" + self.doc['aaData'][i-1][2]\
                     .split(" Client : ")[1]\
                     .split('\'')[0] + ")"
+                if not "Non communiqu" in label:
+                    text += label
             except IndexError:
                 pass
             
