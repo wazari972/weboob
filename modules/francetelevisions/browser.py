@@ -30,7 +30,6 @@ class PluzzBrowser(PagesBrowser):
     BASEURL = 'http://pluzz.francetv.fr'
 
     index_page = URL(r'recherche\?recherche=(?P<pattern>.*)', IndexPage)
-    latest_page = URL(r'lesplusrecents', IndexPage)
     video_page = URL(r'http://webservices.francetelevisions.fr/tools/getInfosOeuvre/v2/\?idDiffusion=(?P<id>.*)&catalogue=Pluzz', VideoPage)
 
     def search_videos(self, pattern):
@@ -47,8 +46,4 @@ class PluzzBrowser(PagesBrowser):
     def read_url(self, url):
         r = self.open(url, stream=True)
         buf = r.iter_lines()
-        r.close()
         return buf
-
-    def latest_videos(self):
-        return self.latest_page.go().iter_videos()

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2014      Bezleputh
+# Copyright(C) 2014 Johann Broudin
 #
 # This file is part of weboob.
 #
@@ -17,19 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
+from .module import VirginRadioModule
 
-from weboob.tools.test import BackendTest, SkipTest
-from datetime import datetime
-
-
-class SenscritiqueTest(BackendTest):
-    MODULE = 'senscritique'
-
-    def test_senscritique(self):
-        try:
-            l = list(self.backend.list_events(datetime.now()))
-            assert len(l)
-            event = self.backend.get_event(l[0].id)
-            self.assertTrue(event.url, 'URL for event "%s" not found: %s' % (event.id, event.url))
-        except StopIteration:
-            raise SkipTest("Max iteration reach")
+__all__ = ['VirginRadioModule']

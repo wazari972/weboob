@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2013 Bezleputh
+# Copyright(C) 2014 Johann Broudin
 #
 # This file is part of weboob.
 #
@@ -17,10 +17,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-from weboob.capabilities.job import BaseJobAdvert
+
+from weboob.tools.test import BackendTest
+from weboob.capabilities.radio import Radio
 
 
-class PopolemploiJobAdvert(BaseJobAdvert):
-    @classmethod
-    def id2url(cls, _id):
-        return 'http://candidat.pole-emploi.fr/candidat/rechercheoffres/detail/%s' % _id
+class VirginRadioTest(BackendTest):
+    MODULE = 'virginradio'
+
+    def test_virginradio(self):
+        l = list(self.backend.iter_resources((Radio, ), []))
+        self.assertTrue(len(l) > 0)

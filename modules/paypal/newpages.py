@@ -45,7 +45,7 @@ class NewAccountPage(Page):
 
         primary_account.balance = Decimal(FrenchTransaction.clean_amount(balance))
 
-        primary_account.label = u'%s %s*' % (self.browser.username, balance.split()[-1])
+        primary_account.label = u'%s %s*' % (self.browser.username, primary_account.currency)
 
         accounts[primary_account.id] = primary_account
 
@@ -91,7 +91,9 @@ class NewPartHistoryPage(Page):
         for status in ['PENDING', 'COMPLETED']:
             transac = self.document['data']['activity'][status]
             for t in transac:
-                transactions.append(self.parse_transaction(t))
+                tran = self.parse_transaction(t)
+                if tran:
+                    transactions.append(tran)
 
         transactions.sort(key=lambda tr: tr.rdate, reverse=True)
         for t in transactions:
@@ -100,10 +102,20 @@ class NewPartHistoryPage(Page):
     def parse_transaction(self, transaction):
         t = FrenchTransaction(transaction['activityId'])
         date = parse_french_date(transaction['date'])
-        raw = transaction['counterparty']
+        try:
+            raw = transaction['counterparty']
+        except KeyError:
+            raw = transaction['displayType']
         t.parse(date=date, raw=raw)
-        amount = transaction['displayAmount']
-        t.set_amount(amount)
+        try:
+            amount = transaction['netAmount']
+        except KeyError:
+            return
+        if transaction['isCredit']:
+            t.set_amount(credit=amount)
+        else:
+            t.set_amount(debit=amount)
         t._currency = transaction['currencyCode']
+
         return t
 

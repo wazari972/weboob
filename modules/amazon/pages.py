@@ -84,7 +84,7 @@ class OrderNewPage(AmazonPage):
         # Payment for not yet shipped orders may change, and is not always
         # available.
         for s in [u'Not Yet Shipped', u'Preparing for Shipment',
-                  u'Shipping now']:
+                  u'Shipping now', u'In transit']:
             if self.doc.xpath(u'//*[contains(text(),"%s")]' % s):
                 return None
 
@@ -113,8 +113,30 @@ class OrderNewPage(AmazonPage):
             pmt.method = u'GIFT CARD'
             pmt.amount = -self.gift()
             yield pmt
-        for trans in self.transactions():
-            yield trans
+        transactions = list(self.transactions())
+        if transactions:
+            for t in transactions:
+                yield t
+        else:
+            for method in self.paymethods():
+                pmt = Payment()
+                pmt.date = self.order_date()
+                pmt.method = method
+                pmt.amount = self.grand_total()
+                yield pmt
+                break
+
+    def paymethods(self):
+        for root in self.doc.xpath('//h5[contains(text(),"Payment Method")]'):
+            alt = root.xpath('../div/img/@alt')[0]
+            span = root.xpath('../div/span/text()')[0]
+            digits = re.match(r'[^0-9]*([0-9]+)[^0-9]*', span).group(1)
+            yield u'%s %s' % (alt, digits)
+
+    def grand_total(self):
+        return AmTr.decimal_amount(self.doc.xpath(
+            u'//span[contains(text(),"Grand Total:")]/..'
+            u'/following-sibling::div[1]/span/text()')[0].strip())
 
     def date_num(self):
         return u' '.join(self.doc.xpath(
@@ -129,7 +151,8 @@ class OrderNewPage(AmazonPage):
 
     def discount(self):
         return self.amount(u'Promotion applied', u'Promotion Applied',
-                           u'Subscribe & Save', u'Your Coupon Savings')
+                           u'Subscribe & Save', u'Your Coupon Savings',
+                           u'Lightning Deal')
 
     def gift(self):
         return self.amount(u'Gift Card Amount')
@@ -137,7 +160,7 @@ class OrderNewPage(AmazonPage):
     def amount(self, *names):
         return Decimal(sum(AmTr.decimal_amount(amount.strip())
            for n in names for amount in self.doc.xpath(
-           '//span[contains(text(),"%s:")]/../..//span[2]/text()' % n)))
+           '(//span[contains(text(),"%s:")]/../..//span)[2]/text()' % n)))
 
     def transactions(self):
         for row in self.doc.xpath('//span[contains(text(),"Transactions")]'
