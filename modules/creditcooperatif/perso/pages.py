@@ -135,9 +135,24 @@ class TransactionsJSONPage(LoggedPage, JsonPage):
 
     def get_transactions(self):
         seen = set()
-        for tr in self.doc['exportData'][1:]:
+        for i, tr in enumerate(self.doc['exportData']):
+            if i == 0:
+                continue
+            text = tr[self.ROW_TEXT]
+            
+            try:
+                # try to get the client transfer text,
+                # ignore if it fails
+                label = " (" + self.doc['aaData'][i-1][2]\
+                    .split(" Client : ")[1]\
+                    .split('\'')[0] + ")"
+                if not "Non communiqu" in label:
+                    text += label
+            except IndexError:
+                pass
+            
             t = Transaction(0)
-            t.parse(tr[self.ROW_DATE], tr[self.ROW_TEXT])
+            t.parse(tr[self.ROW_DATE], text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             t.id = t.unique_id(seen)
             yield t
@@ -175,7 +190,9 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
         for tr in data:
             t = Transaction(0)
             text = tr[self.ROW_TEXT].replace("BANQUE EN LIGNE EN ATTENTE D EXECUTION", "(en attente)")
-            t.parse(tr[self.ROW_DATE], text)
+            # Json field DATA might be missing
+            date = tr[self.ROW_DATE] if tr[self.ROW_DATE] != tr[self.ROW_DEBIT] else None
+            t.parse(date, text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             yield t
                 
@@ -206,6 +223,9 @@ class ComingCBTransactionsPage(LoggedPage, HTMLPage):
             t = Transaction(0)
             text = tr[self.ROW_TEXT]
             t.parse(tr[self.ROW_DATE], text)
-            t.set_amount(debit=tr[self.ROW_DEBIT])
+            if "+" in tr[self.ROW_DEBIT]:
+                t.set_amount(credit=tr[self.ROW_DEBIT])
+            else:
+                t.set_amount(debit=tr[self.ROW_DEBIT])
             yield t
             
