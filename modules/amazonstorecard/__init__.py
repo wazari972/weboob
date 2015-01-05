@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2013      franek
+# Copyright(C) 2014-2015      Oleg Plakhotniuk
 #
 # This file is part of weboob.
 #
@@ -17,19 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-from weboob.capabilities.video import BaseVideo
-from weboob.tools.test import BackendTest, SkipTest
 
+from .module import AmazonStoreCardModule
 
-class ArretSurImagesTest(BackendTest):
-    MODULE = 'arretsurimages'
-
-    def test_latest_arretsurimages(self):
-        l = list(self.backend.iter_resources([BaseVideo], [u'latest']))
-        assert len(l)
-        if self.backend.browser.username != u'None':
-            v = l[0]
-            self.backend.fillobj(v, ('url',))
-            self.assertTrue(v.url, 'URL for video "%s" not found' % (v.id))
-        else:
-            raise SkipTest("User credentials not defined")
+__all__ = ['AmazonStoreCardModule']

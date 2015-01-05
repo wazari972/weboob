@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2013      franek
+# Copyright(C) 2014-2015      Oleg Plakhotniuk
 #
 # This file is part of weboob.
 #
@@ -17,19 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-from weboob.capabilities.video import BaseVideo
-from weboob.tools.test import BackendTest, SkipTest
+from weboob.tools.test import BackendTest
+from itertools import chain
 
 
-class ArretSurImagesTest(BackendTest):
-    MODULE = 'arretsurimages'
+class AmazonStoreCardTest(BackendTest):
+    MODULE = 'amazonstorecard'
 
-    def test_latest_arretsurimages(self):
-        l = list(self.backend.iter_resources([BaseVideo], [u'latest']))
-        assert len(l)
-        if self.backend.browser.username != u'None':
-            v = l[0]
-            self.backend.fillobj(v, ('url',))
-            self.assertTrue(v.url, 'URL for video "%s" not found' % (v.id))
-        else:
-            raise SkipTest("User credentials not defined")
+    def test_history(self):
+        """
+        Test that there's at least one transaction in the whole history.
+        """
+        b = self.backend
+        ts = chain(*[b.iter_history(a) for a in b.iter_accounts()])
+        t = next(ts, None)
+        self.assertNotEqual(t, None)
