@@ -22,6 +22,10 @@ from weboob.exceptions import BrowserIncorrectPassword
 
 from .pages import LoginPage, CreditLoggedPage, AccountsPage, TransactionsPage, TransactionsJSONPage, ComingTransactionsPage, EncoursCBPage, ComingCBTransactionsPage
 
+try:
+    from . import config_perso
+except:
+    config_perso = None
 
 __all__ = ['CreditCooperatif']
 
@@ -74,6 +78,11 @@ class CreditCooperatif(LoginBrowser):
             if len(account._has_cb) != 0:
                 self.encourscbpage.go(data=data)
                 accounts += self.page.get_list()
+
+        if config_perso is not None:
+            for account in accounts:
+                if config_perso.RENAME.has_key(account.id):
+                   account.label = config_perso.RENAME[account.id]
                 
         return accounts
         
