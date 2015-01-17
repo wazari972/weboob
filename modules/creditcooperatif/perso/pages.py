@@ -190,8 +190,17 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
         for tr in data:
             t = Transaction(0)
             text = tr[self.ROW_TEXT].replace("BANQUE EN LIGNE EN ATTENTE D EXECUTION", "(en attente)")
+            
             # Json field DATE might be missing
-            date = tr[self.ROW_DATE] if tr[self.ROW_DATE] != tr[self.ROW_DEBIT] else None
+            date = tr[self.ROW_DATE]
+            if "CHEQUE" in text:
+                # no date available, it contains "En attente de ..."
+                text = " ".join(text.split(" ")[:-1]) # last word is a 'random' number
+                text += " ({})".format(date)
+                date = None
+            elif tr[self.ROW_DATE] == tr[self.ROW_DEBIT]:
+                date = None
+                
             t.parse(date, text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
             yield t
