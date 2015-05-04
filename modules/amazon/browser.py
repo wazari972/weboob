@@ -18,26 +18,31 @@
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
 
+from requests.exceptions import Timeout, ConnectionError
+
 from weboob.browser import LoginBrowser, URL, need_login
 from weboob.browser.exceptions import ServerError, HTTPNotFound
-from weboob.capabilities.base import Currency
 from weboob.capabilities.shop import OrderNotFound
 from weboob.exceptions import BrowserIncorrectPassword
 
 from .pages import HomePage, LoginPage, AmazonPage, HistoryPage, \
-                   OrderOldPage, OrderNewPage
-
+    OrderOldPage, OrderNewPage
 
 __all__ = ['Amazon']
 
 
 class Amazon(LoginBrowser):
     BASEURL = 'https://www.amazon.com'
-    home = URL(r'http://www\.amazon\.com/$', HomePage)
+    MAX_RETRIES = 10
+    CURRENCY = u'$'
+    home = URL(r'/$', r'http://www.amazon.com/$', HomePage)
     login = URL(r'/ap/signin/.*$', LoginPage)
-    history = URL(r'/gp/css/order-history.*$', HistoryPage)
+    history = URL(r'/gp/css/order-history.*$',
+                  r'/gp/your-account/order-history.*$', HistoryPage)
     order_old = URL(r'/gp/css/summary.*$',
                     r'/gp/css/summary/edit.html\?orderID=%\(order_id\)s',
+                    r'/gp/digital/your-account/order-summary.html.*$',
+                    r'/gp/digital/your-account/orderPe-summary.html\?orderID=%\(order_id\)s',
                     OrderOldPage)
     order_new = URL(r'/gp/css/summary.*$',
                     r'/gp/your-account/order-details.*$',
@@ -46,8 +51,7 @@ class Amazon(LoginBrowser):
     unknown = URL(r'/.*$', AmazonPage)
 
     def get_currency(self):
-        # Amazon uses only U.S. dollars.
-        return Currency.get_currency(u'$')
+        return self.CURRENCY
 
     def get_order(self, id_):
         order = self.to_order(id_).order()
@@ -82,13 +86,13 @@ class Amazon(LoginBrowser):
         their users to new pages, and the rest to old ones.
         """
         if (not self.order_new.is_here() and not self.order_old.is_here()) \
-        or self.page.order_number() != order_id:
+                or self.page.order_number() != order_id:
             try:
                 self.order_new.go(order_id=order_id)
             except HTTPNotFound:
                 self.order_old.go(order_id=order_id)
         if (not self.order_new.is_here() and not self.order_old.is_here()) \
-        or self.page.order_number() != order_id:
+                or self.page.order_number() != order_id:
             raise OrderNotFound()
         return self.page
 
@@ -106,6 +110,6 @@ class Amazon(LoginBrowser):
         for i in xrange(self.MAX_RETRIES):
             try:
                 return super(Amazon, self).location(*args, **kwargs)
-            except ServerError as e:
+            except (ServerError, Timeout, ConnectionError) as e:
                 pass
         raise e

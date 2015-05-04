@@ -18,12 +18,13 @@
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
 
-from weboob.capabilities.shop import CapShop
+from weboob.capabilities.shop import CapShop, Order
 from weboob.tools.backend import Module, BackendConfig
-from weboob.tools.value import ValueBackendPassword
+from weboob.tools.value import Value, ValueBackendPassword
+from weboob.tools.ordereddict import OrderedDict
 
 from .browser import Amazon
-
+from .fr.browser import AmazonFR
 
 __all__ = ['AmazonModule']
 
@@ -35,12 +36,24 @@ class AmazonModule(Module, CapShop):
     VERSION = '1.1'
     LICENSE = 'AGPLv3+'
     DESCRIPTION = u'Amazon'
+
+    website_choices = OrderedDict([(k, u'%s (%s)' % (v, k)) for k, v in sorted({
+        'www.amazon.com': u'Amazon.com',
+        'www.amazon.fr': u'Amazon France',
+        }.iteritems())])
+
+    BROWSERS = {
+        'www.amazon.com': Amazon,
+        'www.amazon.fr': AmazonFR,
+        }
+
     CONFIG = BackendConfig(
+        Value('website',  label=u'Website', choices=website_choices, default='www.amazon.com'),
         ValueBackendPassword('email', label='Username', masked=False),
         ValueBackendPassword('password', label='Password'))
-    BROWSER = Amazon
 
     def create_default_browser(self):
+        self.BROWSER = self.BROWSERS[self.config['website'].get()]
         return self.create_browser(self.config['email'].get(),
                                    self.config['password'].get())
 
@@ -54,7 +67,11 @@ class AmazonModule(Module, CapShop):
         return self.browser.iter_orders()
 
     def iter_payments(self, order):
+        if not isinstance(order, Order):
+            order = self.get_order(order)
         return self.browser.iter_payments(order)
 
     def iter_items(self, order):
+        if not isinstance(order, Order):
+            order = self.get_order(order)
         return self.browser.iter_items(order)

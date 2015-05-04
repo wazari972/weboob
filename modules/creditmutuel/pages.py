@@ -39,11 +39,17 @@ from weboob.tools.date import parse_french_date
 
 
 class LoginPage(HTMLPage):
+    REFRESH_MAX = 10.0
+
     def login(self, login, passwd):
         form = self.get_form(nr=0)
         form['_cm_user'] = login
         form['_cm_pwd'] = passwd
         form.submit()
+
+    @property
+    def logged(self):
+        return self.doc.xpath('//div[@id="e_identification_ok"]')
 
 
 class LoginErrorPage(HTMLPage):
@@ -51,7 +57,7 @@ class LoginErrorPage(HTMLPage):
 
 
 class EmptyPage(LoggedPage, HTMLPage):
-    pass
+    REFRESH_MAX = 10.0
 
 
 class UserSpacePage(LoggedPage, HTMLPage):
@@ -69,7 +75,25 @@ class VerifCodePage(LoggedPage, HTMLPage):
 
 
 class TransfertPage(LoggedPage, HTMLPage):
-    pass
+    def get_account_index(self, direction, account):
+        for div in self.doc.getroot().cssselect(".dw_dli_contents"):
+            inp = div.cssselect("input")[0]
+            if inp.name != direction:
+                continue
+            acct = div.cssselect("span.doux")[0].text.replace(" ", "")
+            if account.endswith(acct):
+                return inp.attrib['value']
+        else:
+            raise ValueError("account %s not found" % account)
+
+    def get_from_account_index(self, account):
+        return self.get_account_index('data_input_indiceCompteADebiter', account)
+
+    def get_to_account_index(self, account):
+        return self.get_account_index('data_input_indiceCompteACrediter', account)
+
+    def get_unicode_content(self):
+        return self.content.decode(self.detect_encoding())
 
 
 class AccountsPage(LoggedPage, HTMLPage):
@@ -94,7 +118,7 @@ class AccountsPage(LoggedPage, HTMLPage):
                     return False
 
                 first_td = self.el.xpath('./td')[0]
-                return ((first_td.attrib.get('class', '') == 'i g' or first_td.attrib.get('class', '') == 'p g')
+                return (("i" in first_td.attrib.get('class', '') or "p" in first_td.attrib.get('class', ''))
                         and first_td.find('a') is not None)
 
             class Label(Filter):
@@ -200,7 +224,7 @@ class OperationsPage(LoggedPage, HTMLPage):
         item_xpath = '//table[@class="liste"]//tbody/tr'
 
         class item(Transaction.TransactionElement):
-            condition = lambda self: len(self.el.xpath('./td')) >= 4 and len(self.el.xpath('./td[@class="i g" or @class="p g" or contains(@class, "_c1 c _c1")]')) > 0
+            condition = lambda self: len(self.el.xpath('./td')) >= 4 and len(self.el.xpath('./td[@class="i g" or @class="p g" or contains(@class, "_c1")]')) > 0
 
             class OwnRaw(Filter):
                 def __call__(self, item):

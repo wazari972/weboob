@@ -195,7 +195,7 @@ class UnavailablePage(BasePage):
         except IndexError:
             raise BrowserUnavailable()
         else:
-            self.browser.location(a.attrib['href'])
+            self.browser.location(a.attrib['href'], nologin=True)
 
 
 class LoginPage(BasePage):
@@ -243,6 +243,16 @@ class Login2Page(LoginPage):
 
         doc = json.load(r)
         self.logger.debug(doc)
+        if 'phase' in doc and doc['phase']['state'] == 'TERMS_OF_USE':
+            # Got:
+            # {u'phase': {u'state': u'TERMS_OF_USE'}, u'validationUnits': [{u'LIST_OF_TERMS': [{u'type': u'TERMS', u'id': u'b7f28f91-7aa0-48aa-8028-deec13ae341b', u'reference': u'CGU_CYBERPLUS'}]}]}
+            payload = {'validate': doc['validationUnits'][0]}
+            req = self.browser.request_class(self.request_url + '/step')
+            req.add_header('Content-Type', 'application/json')
+            r = self.browser.openurl(req, json.dumps(payload))
+            doc = json.load(r)
+            self.logger.debug(doc)
+
         if ('phase' in doc and doc['phase']['previousResult'] == 'FAILED_AUTHENTICATION') or \
            doc['response']['status'] != 'AUTHENTICATION_SUCCESS':
             raise BrowserIncorrectPassword()
@@ -273,8 +283,13 @@ class HomePage(BasePage):
                     vary = m.group(1)
                     break
 
-        #r = self.browser.openurl(self.browser.request_class(self.browser.buildurl(self.browser.absurl("/portailinternet/_layouts/Ibp.Cyi.Application/GetuserInfo.ashx"), action='UInfo', vary=vary), None, {'Referer': self.url}))
-        #print r.read()
+        r = self.browser.openurl(self.browser.request_class(self.browser.buildurl(self.browser.absurl("/portailinternet/_layouts/Ibp.Cyi.Application/GetuserInfo.ashx"), action='UInfo', vary=vary), None, {'Referer': self.url}))
+        doc = json.load(r)
+        m = re.search("vary=([\d-]+)", doc['accountContent'])
+        if m:
+            vary = m.group(1)
+        else:
+            self.logger.warning("Vary not found")
 
         r = self.browser.openurl(self.browser.request_class(self.browser.buildurl(self.browser.absurl('/portailinternet/Transactionnel/Pages/CyberIntegrationPage.aspx'), vary=vary), 'taskId=aUniversMesComptes', {'Referer': self.url}))
         doc = self.browser.get_document(r)
@@ -283,7 +298,7 @@ class HomePage(BasePage):
             if script.text is None:
                 continue
 
-            m = re.search('lastConnectionDate":"([^"]+)"', script.text)
+            m = re.search('lastConnectionDate":"([^"]*)"', script.text)
             if m:
                 date = m.group(1)
 

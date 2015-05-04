@@ -57,7 +57,7 @@ class HistoryPage(AmazonPage):
     @pagination
     def iter_orders(self):
         for id_ in self.doc.xpath(
-                     u'//span[contains(text(),"Order #")]/../span[2]/text()'):
+                u'//span[contains(text(),"Order #")]/../span[2]/text()'):
             yield self.browser.to_order(id_.strip())
         for next_ in self.doc.xpath(u'//ul[@class="a-pagination"]'
                                     u'//a[contains(text(),"Next")]/@href'):
@@ -71,29 +71,33 @@ class HistoryPage(AmazonPage):
 
     def opt_years(self):
         return [x for x in self.doc.xpath(
-                        '//select[@name="orderFilter"]/option/@value'
-                ) if x.startswith('year-')]
+            '//select[@name="orderFilter"]/option/@value'
+            ) if x.startswith('year-')]
 
 
-class OrderNewPage(AmazonPage):
-    is_here = u'//*[contains(text(),"Ordered on")]'
-
-    def order(self):
+class OrderPage(AmazonPage):
+    def shouldSkip(self):
         # Reports only fully shipped and delivered orders, because they have
         # finalized payment amounts.
         # Payment for not yet shipped orders may change, and is not always
         # available.
-        for s in [u'Not Yet Shipped', u'Preparing for Shipment',
-                  u'Shipping now', u'In transit']:
-            if self.doc.xpath(u'//*[contains(text(),"%s")]' % s):
-                return None
+        return bool([x for s in [u'Not Yet Shipped', u'Not yet shipped',
+                                 u'Preparing for Shipment', u'Shipping now', u'In transit',
+                                 u'On the way']
+                    for x in self.doc.xpath(u'//*[contains(text(),"%s")]' % s)])
 
-        order = Order(id=self.order_number())
-        order.date = self.order_date()
-        order.tax = self.tax()
-        order.discount = self.discount()
-        order.shipping = self.shipping()
-        return order
+
+class OrderNewPage(OrderPage):
+    is_here = u'//*[contains(text(),"Ordered on")]'
+
+    def order(self):
+        if not self.shouldSkip():
+            order = Order(id=self.order_number())
+            order.date = self.order_date()
+            order.tax = self.tax()
+            order.discount = self.discount()
+            order.shipping = self.shipping()
+            return order
 
     def order_date(self):
         return datetime.strptime(
@@ -102,7 +106,7 @@ class OrderNewPage(AmazonPage):
             '%B %d, %Y')
 
     def order_number(self):
-        m = re.match('.*Order# ([^ ]+) .*', self.date_num())
+        m = re.match('.*Order# +([^ ]+) .*', self.date_num())
         if m:
             return m.group(1)
 
@@ -127,11 +131,15 @@ class OrderNewPage(AmazonPage):
                 break
 
     def paymethods(self):
-        for root in self.doc.xpath('//h5[contains(text(),"Payment Method")]'):
-            alt = root.xpath('../div/img/@alt')[0]
-            span = root.xpath('../div/span/text()')[0]
-            digits = re.match(r'[^0-9]*([0-9]+)[^0-9]*', span).group(1)
-            yield u'%s %s' % (alt, digits)
+        for root in self.doc.xpath(u'//h5[contains(text(),"Payment Method")]'):
+            div = u''.join(root.xpath('../div/text()')).strip()
+            if div:
+                yield div
+            else:
+                alt = root.xpath('../div/img/@alt')[0]
+                span = root.xpath('../div/span/text()')[0]
+                digits = re.match(r'[^0-9]*([0-9]+)[^0-9]*', span).group(1)
+                yield u'%s %s' % (alt, digits)
 
     def grand_total(self):
         return AmTr.decimal_amount(self.doc.xpath(
@@ -140,27 +148,31 @@ class OrderNewPage(AmazonPage):
 
     def date_num(self):
         return u' '.join(self.doc.xpath(
-            '//div[contains(text(),"Ordered on")]/text()')).replace('\n', '')
+            '//span[@class="order-date-invoice-item"]/text()'
+            ) or self.doc.xpath(
+            '//*[contains(text(),"Ordered on")]/text()')).replace('\n', '')
 
     def tax(self):
         return self.amount(u'Estimated tax to be collected')
 
     def shipping(self):
         return self.amount(u'Free shipping', u'Free Shipping',
+                           u'Prime Pantry Delivery',
                            u'Shipping & Handling')
 
     def discount(self):
         return self.amount(u'Promotion applied', u'Promotion Applied',
                            u'Subscribe & Save', u'Your Coupon Savings',
-                           u'Lightning Deal')
+                           u'Lightning Deal', u'No-Rush Credit')
 
     def gift(self):
         return self.amount(u'Gift Card Amount')
 
     def amount(self, *names):
         return Decimal(sum(AmTr.decimal_amount(amount.strip())
-           for n in names for amount in self.doc.xpath(
-           '(//span[contains(text(),"%s:")]/../..//span)[2]/text()' % n)))
+                       for n in names for amount in self.doc.xpath(
+                       '//span[contains(text(),"%s:")]'
+                       '/../following::div[1]/span/text()' % n)))
 
     def transactions(self):
         for row in self.doc.xpath('//span[contains(text(),"Transactions")]'
@@ -198,8 +210,8 @@ class OrderNewPage(AmazonPage):
                 price *= Decimal(amount)
             if url:
                 url = unicode(self.browser.BASEURL) + \
-                      re.match(u'(/gp/product/.*)/ref=.*', url).group(1)
-            if label and price:
+                    re.match(u'(/gp/product/.*)/ref=.*', url).group(1)
+            if label:
                 itm = Item()
                 itm.label = label
                 itm.url = url
@@ -207,25 +219,17 @@ class OrderNewPage(AmazonPage):
                 yield itm
 
 
-class OrderOldPage(AmazonPage):
+class OrderOldPage(OrderPage):
     is_here = u'//*[contains(text(),"Amazon.com order number")]'
 
     def order(self):
-        # Reports only fully shipped and delivered orders, because they have
-        # finalized payment amounts.
-        # Payment for not yet shipped orders may change, and are not always
-        # available.
-        for s in [u'Not Yet Shipped', u'Preparing for Shipment',
-                  u'Shipping now']:
-            if self.doc.xpath(u'//b[contains(text(),"%s")]' % s):
-                return None
-
-        order = Order(id=self.order_number())
-        order.date = self.order_date()
-        order.tax = self.tax()
-        order.discount = self.discount()
-        order.shipping = self.shipping()
-        return order
+        if not self.shouldSkip():
+            order = Order(id=self.order_number())
+            order.date = self.order_date()
+            order.tax = self.tax()
+            order.discount = self.discount()
+            order.shipping = self.shipping()
+            return order
 
     def order_date(self):
         return datetime.strptime(u' '.join(self.doc.xpath(
@@ -242,7 +246,7 @@ class OrderOldPage(AmazonPage):
 
     def discount(self):
         return self.sum_amounts(u'Subscribe & Save:', u'Promotion applied:',
-                            u'Promotion Applied:', u'Your Coupon Savings:')
+                                u'Promotion Applied:', u'Your Coupon Savings:')
 
     def shipping(self):
         return self.sum_amounts(u'Shipping & Handling:', u'Free shipping:',
@@ -304,8 +308,8 @@ class OrderOldPage(AmazonPage):
                 yield itm
 
     def sum_amounts(self, *names):
-        return sum(self.amount(shmt,x) for shmt in self.shipments()
-                                       for x in names)
+        return sum(self.amount(shmt, x) for shmt in self.shipments()
+                   for x in names)
 
     def amount(self, shmt, name):
         for root in shmt.xpath(u'../../../../../../../..'
@@ -328,7 +332,7 @@ class OrderOldPage(AmazonPage):
             for pattern in [
                     u'^.*Payment Method:',
                     u'^([^\n]+)\n +\| Last digits: +([0-9]+)\n',
-                    u'^Gift Card\n', # Skip gift card.
+                    u'^Gift Card\n',  # Skip gift card.
                     u'^Billing address.*$']:
                 match = re.match(pattern, text, re.DOTALL+re.MULTILINE)
                 if match:

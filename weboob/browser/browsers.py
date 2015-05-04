@@ -20,6 +20,9 @@
 from __future__ import absolute_import, print_function
 
 import re
+import pickle
+import base64
+import zlib
 try:
     import urllib3
 except ImportError:
@@ -88,6 +91,11 @@ class Browser(object):
     Maximum of threads for asynchronous requests.
     """
 
+    __states__ = []
+    """
+    Saved state variables.
+    """
+
     @classmethod
     def asset(cls, localfile):
         """
@@ -110,7 +118,30 @@ class Browser(object):
         if isinstance(self.VERIFY, basestring):
             self.VERIFY = self.asset(self.VERIFY)
 
-    def _save(self, response, warning=False, **kwargs):
+    def deinit(self):
+        self.session.close()
+
+    def load_state(self, state):
+        if 'cookies' in state:
+            try:
+                self.session.cookies = pickle.loads(zlib.decompress(base64.b64decode(state['cookies'])))
+            except (TypeError, zlib.error, EOFError, ValueError):
+                self.logger.error('Unable to reload cookies from storage')
+            else:
+                self.logger.info('Reloaded cookies from storage')
+        for attrname in self.__states__:
+            if attrname in state:
+                setattr(self, attrname, state[attrname])
+
+    def dump_state(self):
+        state = {}
+        state['cookies'] = base64.b64encode(zlib.compress(pickle.dumps(self.session.cookies, -1)))
+        for attrname in self.__states__:
+            state[attrname] = getattr(self, attrname)
+        self.logger.info('Stored cookies into storage')
+        return state
+
+    def save_response(self, response, warning=False, **kwargs):
         if self.responses_dirname is None:
             import tempfile
             self.responses_dirname = tempfile.mkdtemp(prefix='weboob_session_')
@@ -168,7 +199,7 @@ class Browser(object):
         """
         Set up a python-requests session for our usage.
         """
-        session = FuturesSession(max_workers=self.MAX_WORKERS)
+        session = FuturesSession(max_workers=self.MAX_WORKERS, max_retries=self.MAX_RETRIES)
 
         session.proxies = self.PROXIES
 
@@ -177,7 +208,8 @@ class Browser(object):
             try:
                 urllib3.disable_warnings()
             except AttributeError:
-                self.logger.warning('Urllib3 is too old, warnings won\'t be disable')
+                # urllib3 is too old, warnings won't be disable
+                pass
 
         # defines a max_retries. It's mandatory in case a server is not
         # handling keep alive correctly, like the proxy burp
@@ -193,7 +225,7 @@ class Browser(object):
         profile.setup_session(session)
 
         if self.logger.settings['save_responses']:
-            session.hooks['response'].append(self._save)
+            session.hooks['response'].append(self.save_response)
 
         self.session = session
 
@@ -725,6 +757,26 @@ class LoginBrowser(PagesBrowser):
         It is call when a login is needed.
         """
         raise NotImplementedError()
+
+    def do_logout(self):
+        self.session.cookies.clear()
+
+    def load_state(self, state):
+        super(LoginBrowser, self).load_state(state)
+
+        if 'url' in state:
+            try:
+                self.location(state['url'])
+            except requests.exceptions.HTTPError:
+                pass
+
+    def dump_state(self):
+        if not self.page or not self.page.logged:
+            return {}
+
+        state = super(LoginBrowser, self).dump_state()
+        state['url'] = self.page.url
+        return state
 
 
 class APIBrowser(DomainBrowser):

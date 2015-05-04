@@ -21,7 +21,7 @@
 from datetime import datetime, date
 
 from .base import Capability, BaseObject, Field, FloatField, \
-                  StringField, UserError
+                  StringField, UserError, NotLoaded
 from .date import DateField
 
 __all__ = ['Forecast', 'Current', 'City', 'CityNotFound', 'Temperature', 'CapWeather']
@@ -32,8 +32,8 @@ class Temperature(BaseObject):
     value =      FloatField('Temperature value')
     unit =       StringField('Input unit')
 
-    def __init__(self, value='', unit = u''):
-        BaseObject.__init__(self, value)
+    def __init__(self, value=NotLoaded, unit = u''):
+        BaseObject.__init__(self, unicode(value))
         self.value = value
         if unit not in [u'C', u'F']:
             unit = u''
@@ -43,17 +43,17 @@ class Temperature(BaseObject):
         if not self.unit:
             return u'%s' % int(round(self.value))
         elif self.unit == 'F':
-            return u'%s°F' % int(round(self.value))
+            return u'%s °F' % int(round(self.value))
         else:
-            return u'%s°F' % int(round((self.value * 9.0 / 5.0) + 32))
+            return u'%s °F' % int(round((self.value * 9.0 / 5.0) + 32))
 
     def ascelsius(self):
         if not self.unit:
             return u'%s' % int(round(self.value))
         elif self.unit == 'C':
-            return u'%s°C' % int(round(self.value))
+            return u'%s °C' % int(round(self.value))
         else:
-            return u'%s°C' % int(round((self.value - 32.0) * 5.0 / 9.0))
+            return u'%s °C' % int(round((self.value - 32.0) * 5.0 / 9.0))
 
     def __repr__(self):
         if self.value is not None and self.unit:
@@ -69,7 +69,7 @@ class Forecast(BaseObject):
     high =      Field('High temperature', Temperature)
     text =      StringField('Comment on forecast')
 
-    def __init__(self, date='', low=None, high=None, text=None, unit=None):
+    def __init__(self, date=NotLoaded, low=None, high=None, text=None, unit=None):
         BaseObject.__init__(self, unicode(date))
         self.date = date
         self.low = Temperature(low, unit)
@@ -85,7 +85,7 @@ class Current(BaseObject):
     text =      StringField('Comment about current weather')
     temp =      Field('Current temperature', Temperature)
 
-    def __init__(self, date='', temp=None, text=None, unit=None):
+    def __init__(self, date=NotLoaded, temp=None, text=None, unit=None):
         BaseObject.__init__(self, unicode(date))
         self.date = date
         self.text = text

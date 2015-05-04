@@ -225,7 +225,7 @@ class BackendCfg(QDialog):
                 continue
 
             item = QTreeWidgetItem(None, [instance_name, name])
-            item.setCheckState(0, Qt.Checked if params.get('_enabled', '1').lower() in ('1', 'y', 'true')
+            item.setCheckState(0, Qt.Checked if params.get('_enabled', '1').lower() in ('1', 'y', 'true', 'on', 'yes')
                 else Qt.Unchecked)
 
             self.set_icon(item, info)
@@ -239,14 +239,14 @@ class BackendCfg(QDialog):
         bname = unicode(item.text(1))
         if item.checkState(0) == Qt.Checked:
             self.to_load.add(instname)
-            enabled = '1'
+            enabled = 'true'
         else:
             self.to_unload.add(instname)
             try:
                 self.to_load.remove(instname)
             except KeyError:
                 pass
-            enabled = '0'
+            enabled = 'false'
 
         self.weboob.backends_config.edit_backend(instname, bname, {'_enabled': enabled})
 

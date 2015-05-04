@@ -93,18 +93,24 @@ class WeboobCfg(ReplApplication):
 
     def do_add(self, line):
         """
-        add NAME [OPTIONS ...]
+        add MODULE_NAME [BACKEND_NAME] [PARAMETERS ...]
 
-        Add a backend.
+        Create a backend from a module. By default, if BACKEND_NAME is omitted,
+        that's the module name which is used.
+
+        You can specify parameters from command line in form "key=value".
         """
         if not line:
             print('You must specify a module name. Hint: use the "modules" command.', file=self.stderr)
             return 2
-        name, options = self.parse_command_args(line, 2, 1)
+
+        module_name, options = self.parse_command_args(line, 2, 1)
         if options:
             options = options.split(' ')
         else:
             options = ()
+
+        backend_name = None
 
         params = {}
         # set backend params from command-line arguments
@@ -112,11 +118,15 @@ class WeboobCfg(ReplApplication):
             try:
                 key, value = option.split('=', 1)
             except ValueError:
-                print('Parameters have to be formatted "key=value"', file=self.stderr)
-                return 2
-            params[key] = value
+                if backend_name is None:
+                    backend_name = option
+                else:
+                    print('Parameters have to be formatted "key=value"', file=self.stderr)
+                    return 2
+            else:
+                params[key] = value
 
-        self.add_backend(name, params)
+        self.add_backend(module_name, backend_name or module_name, params)
 
     def do_register(self, line):
         """
@@ -204,7 +214,7 @@ class WeboobCfg(ReplApplication):
 
         Enable a disabled backend
         """
-        return self._do_toggle(name, 1)
+        return self._do_toggle(name, "true")
 
     def do_disable(self, name):
         """
@@ -212,7 +222,7 @@ class WeboobCfg(ReplApplication):
 
         Disable a backend
         """
-        return self._do_toggle(name, 0)
+        return self._do_toggle(name, "false")
 
     def do_edit(self, line):
         """

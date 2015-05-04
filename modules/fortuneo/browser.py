@@ -25,7 +25,7 @@ from dateutil.relativedelta import relativedelta
 from weboob.deprecated.browser import Browser, BrowserIncorrectPassword
 
 from .pages.login import LoginPage
-from .pages.accounts_list import GlobalAccountsList, AccountsList, AccountHistoryPage, InvestmentHistoryPage
+from .pages.accounts_list import GlobalAccountsList, AccountsList, AccountHistoryPage, InvestmentHistoryPage, PeaHistoryPage
 
 __all__ = ['Fortuneo']
 
@@ -34,7 +34,7 @@ class Fortuneo(Browser):
     DOMAIN_LOGIN = 'www.fortuneo.fr'
     DOMAIN = 'www.fortuneo.fr'
     PROTOCOL = 'https'
-    CERTHASH = ['97628e02c676d88bb8eb6d91a10b50cffd7275e273902975b4e1eb7154270c4e', '0d4bac62f78560af8215077676b04f80c5e0e8eb267c66b665b142d2e185e58a']
+    CERTHASH = ['4ff0301115f80f18c4e81a136ca28829b46d416d404174945b1ae48abd0634e2']
     ENCODING = None # refer to the HTML encoding
     PAGES = {
             '.*identification\.jsp.*' :                                                         LoginPage,
@@ -47,7 +47,8 @@ class Fortuneo(Browser):
             '.*/prive/mes-comptes/compte-courant/consulter-situation/consulter-solde\.jsp.*' :  AccountHistoryPage,
             '.*/prive/mes-comptes/compte-titres-.*':                                            InvestmentHistoryPage,
             '.*/prive/mes-comptes/assurance-vie.*':                                             InvestmentHistoryPage,
-            '.*/prive/mes-comptes/pea.*':                                                       InvestmentHistoryPage,
+            '.*/prive/mes-comptes/pea.*':                                                       PeaHistoryPage,
+            '.*/prive/mes-comptes/compte-especes.*':                                            InvestmentHistoryPage,
             }
 
     def __init__(self, *args, **kwargs):

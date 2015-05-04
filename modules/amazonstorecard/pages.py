@@ -55,12 +55,21 @@ class SummaryPage(SomePage):
             u'//text()[contains(.,"Account ending in")]')).split())
         balance = self.doc.xpath(
             '//span[@id="currentBalance"]/..')[0].text_content()
+        cardlimit = self.doc.xpath(u'//td[contains(text(),'
+            '"Total Credit Limit")]/../td[2]')[0].text_content()
+        paydate = self.doc.xpath(u'//td[contains(text(),'
+            '"Payment Due Date")]/../td[2]')[0].text_content()
+        paymin = self.doc.xpath(
+            '//span[@id="nextMinPayment"]/..')[0].text_content()
         a = Account()
         a.id = label[-4:]
         a.label = label
         a.currency = Account.get_currency(balance)
         a.balance = -AmTr.decimal_amount(balance)
         a.type = Account.TYPE_CARD
+        a.cardlimit = AmTr.decimal_amount(cardlimit)
+        a.paydate = datetime.strptime(paydate, '%m/%d/%Y')
+        a.paymin = AmTr.decimal_amount(paymin)
         return a
 
 
@@ -73,9 +82,13 @@ class RecentPage(XMLPage):
                 'TRANSDESCRIPTION/text()')[0].split())
             tdate = u''.join(ntrans.xpath('TRANSACTIONDATE/text()'))
             pdate = u''.join(ntrans.xpath('POSTDATE/text()'))
+            # Skip transactions which are not posted,
+            # because they are not accounted for in balance calculation.
+            if not pdate:
+                continue
             t = Transaction()
             t.date = datetime.strptime(tdate, '%m/%d/%Y')
-            t.rdate = datetime.strptime(pdate or tdate, '%m/%d/%Y')
+            t.rdate = datetime.strptime(pdate, '%m/%d/%Y')
             t.type = Transaction.TYPE_UNKNOWN
             t.raw = desc
             t.label = desc

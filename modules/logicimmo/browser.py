@@ -24,7 +24,7 @@ from .pages import CitiesPage, SearchPage, HousingPage, PhonePage
 
 
 class LogicimmoBrowser(PagesBrowser):
-    BASEURL = 'http://www.logic-immo.com'
+    BASEURL = 'http://www.logic-immo.com/'
 
     city = URL('asset/t9/t9_district/fr/(?P<size>\d*)/(?P<first_letter>\w)/(?P<pattern>.*)\.txt\?json=%22(?P<pattern2>.*)%22',
                CitiesPage)
@@ -43,9 +43,10 @@ class LogicimmoBrowser(PagesBrowser):
 
     def get_cities(self, pattern):
         if pattern:
-            size = len(pattern)
+            pattern1 = pattern if len(pattern) < 5 else pattern[:5]
+            size = len(pattern1)
             first_letter = pattern[0].upper()
-            return self.city.go(size=size, first_letter=first_letter, pattern=pattern.upper(),
+            return self.city.go(size=size, first_letter=first_letter, pattern=pattern1.upper(),
                                 pattern2=pattern.upper()).get_cities()
 
     def search_housings(self, type, cities, nb_rooms, area_min, area_max, cost_min, cost_max, house_types):

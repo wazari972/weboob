@@ -23,19 +23,10 @@ from weboob.capabilities.base import BaseObject
 from datetime import timedelta
 
 from weboob.browser.pages import HTMLPage, JsonPage
-from weboob.browser.elements import ItemElement, ListElement, method
+from weboob.browser.elements import ItemElement, ListElement, DictElement, method
 from weboob.browser.filters.standard import Filter, CleanText, Regexp, Format, DateTime, Env, Duration
 from weboob.browser.filters.html import Link, Attr
 from weboob.browser.filters.json import Dict
-
-
-class DictElement(ListElement):
-    def find_elements(self):
-        if self.item_xpath is not None:
-            for el in self.el.get('reponse').get(self.item_xpath):
-                yield el
-        else:
-            yield self.el
 
 
 class DurationPluzz(Filter):
@@ -55,7 +46,7 @@ class VideoListPage(HTMLPage):
 
         obj_id = CleanText('//div[@id="diffusion-info"]/@data-diffusion')
         obj_title = CleanText('//div[@id="diffusion-info"]/h1/div[@id="diffusion-titre"]')
-        obj_date = DateTime(Regexp(CleanText('//div[@id="diffusion-info"]/div/div/span/span[1]',
+        obj_date = DateTime(Regexp(CleanText('//div[@id="diffusion-info"]/div/div/*[1]',
                                    replace=[(u'à', u''), (u'  ', u' ')]),
                                    '.+(\d{2}-\d{2}-\d{2}.+\d{1,2}h\d{1,2}).+'),
                             dayfirst=True)
@@ -72,7 +63,7 @@ class VideoListPage(HTMLPage):
 
             obj_id = Regexp(Link('.'), '^/videos/.+,(.+).html$')
             obj_title = CleanText('//meta[@name="programme_titre"]/@content')
-            obj_date = DateTime(Regexp(CleanText('./div[@class="autre-emission-c2"]',
+            obj_date = DateTime(Regexp(CleanText('./div[@class="autre-emission-c2"]|./div[@class="autre-emission-c4"]',
                                                  replace=[(u'à', u''), (u'  ', u' ')]),
                                        '(\d{2}-\d{2}.+\d{1,2}:\d{1,2})'),
                                 dayfirst=True)
@@ -89,11 +80,11 @@ class IndexPage(HTMLPage):
 
             obj_title = Format('%s du %s',
                                CleanText('div/div[@class="resultat-titre-diff"]/a'),
-                               Regexp(CleanText('div/div[@class="resultat-soustitre-diff"]/span'),
+                               Regexp(CleanText('div/div[@class="resultat-soustitre-diff"]'),
                                       '.+(\d{2}-\d{2}-\d{2}).+'))
             obj_id = Regexp(Link('div/div[@class="resultat-titre-diff"]/a'),
                             '^/videos/.+,(.+).html$')
-            obj_date = DateTime(Regexp(CleanText('div/div[@class="resultat-soustitre-diff"]/span',
+            obj_date = DateTime(Regexp(CleanText('div/div[@class="resultat-soustitre-diff"]',
                                        replace=[(u'à', u''), (u'  ', u' ')]),
                                        '.+(\d{2}-\d{2}-\d{2}.+\d{1,2}h\d{1,2}).+'))
             obj_duration = DurationPluzz('div/div[3]')
@@ -135,7 +126,7 @@ class VideoPage(JsonPage):
 class Programs(JsonPage):
     @method
     class iter_programs(DictElement):
-        item_xpath = 'programme'
+        item_xpath = 'reponse/programme'
 
         class item(ItemElement):
             klass = BaseObject
@@ -147,7 +138,7 @@ class Programs(JsonPage):
 class LatestPage(JsonPage):
     @method
     class iter_videos(DictElement):
-        item_xpath = 'emissions'
+        item_xpath = 'reponse/emissions'
 
         class Item(ItemElement):
             klass = BaseVideo

@@ -143,7 +143,7 @@ class LinearDateGuesser(object):
     sorted from recent to older.
     """
 
-    def __init__(self, current_date=None, date_max_bump=timedelta(7)):
+    def __init__(self, current_date=None, date_max_bump=timedelta(31)):
         self.date_max_bump = date_max_bump
         if current_date is None:
             current_date = date.today()
@@ -215,7 +215,7 @@ class ChaoticDateGuesser(LinearDateGuesser):
     day and month and the minimum year
     """
 
-    def __init__(self, min_date, current_date=None, date_max_bump=timedelta(7)):
+    def __init__(self, min_date, current_date=None, date_max_bump=timedelta(31)):
         if min_date is None:
             raise ValueError("min_date is not set")
         self.min_date = min_date
@@ -246,6 +246,7 @@ DATE_TRANSLATE_FR = [(re.compile(ur'janvier', re.I),   ur'january'),
                      (re.compile(ur'janv\.', re.I),   ur'january'),
                      (re.compile(ur'\bjan\b', re.I),   ur'january'),
                      (re.compile(ur'fév\.', re.I),   ur'february'),
+                     (re.compile(ur'févr\.', re.I),   ur'february'),
                      (re.compile(ur'\bfév\b', re.I),   ur'february'),
                      (re.compile(ur'avr\.', re.I),     ur'april'),
                      (re.compile(ur'\bavr\b', re.I),     ur'april'),
@@ -270,11 +271,14 @@ DATE_TRANSLATE_FR = [(re.compile(ur'janvier', re.I),   ur'january'),
                      (re.compile(ur'dimanche', re.I),  ur'sunday')]
 
 
-def parse_french_date(date):
+def parse_french_date(date, **kwargs):
     for fr, en in DATE_TRANSLATE_FR:
         date = fr.sub(en, date)
 
-    return dateutil.parser.parse(date)
+    if 'dayfirst' not in kwargs:
+        kwargs['dayfirst'] = True
+
+    return dateutil.parser.parse(date, **kwargs)
 
 
 WEEK   = {'MONDAY': 0,

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2010-2011 Romain Bignon
+# Copyright(C) 2015      Oleg Plakhotniuk
 #
 # This file is part of weboob.
 #
@@ -17,18 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-from weboob.deprecated.mech import ClientForm
-ControlNotFoundError = ClientForm.ControlNotFoundError
+from .module import VicSecCardModule
 
-from mechanize import FormNotFoundError
-from weboob.deprecated.browser import Page
-
-
-class PornPage(Page):
-    def on_loaded(self):
-        try:
-            self.browser.select_form(nr=0)
-            self.browser.submit(name='user_choice')
-            return False
-        except (ControlNotFoundError, FormNotFoundError):
-            return True
+__all__ = ['VicSecCardModule']
