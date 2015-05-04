@@ -21,7 +21,7 @@ import re
 from decimal import Decimal
 from datetime import datetime
 from weboob.browser.filters.json import Dict
-from weboob.browser.elements import ItemElement, ListElement, method
+from weboob.browser.elements import ItemElement, ListElement, DictElement, method
 from weboob.browser.pages import JsonPage, HTMLPage, pagination
 from weboob.browser.filters.standard import CleanText, CleanDecimal, Regexp, Env, BrowserURL, Filter, Format
 from weboob.browser.filters.html import CleanHTML, XPath
@@ -29,16 +29,10 @@ from weboob.capabilities.base import NotAvailable, NotLoaded
 from weboob.capabilities.housing import Housing, HousingPhoto, City
 
 
-class DictElement(ListElement):
-    def find_elements(self):
-        for el in self.el[0].get(self.item_xpath):
-            yield el
-
-
 class CitiesPage(JsonPage):
     @method
     class get_cities(DictElement):
-        item_xpath = 'locations'
+        item_xpath = '0/locations'
 
         class item(ItemElement):
             klass = City
@@ -125,9 +119,11 @@ class HousingPage2(JsonPage):
         def obj_photos(self):
             photos = []
             for img in Dict('characteristics/images')(self):
-                m = re.search('http://thbr\.figarocms\.net.*(http://.*)', img)
+                m = re.search('http://thbr\.figarocms\.net.*(http://.*)', img.get('xl'))
                 if m:
                     photos.append(HousingPhoto(m.group(1)))
+                else:
+                    photos.append(HousingPhoto(img.get('xl')))
             return photos
 
         def obj_details(self):
@@ -138,7 +134,7 @@ class HousingPage2(JsonPage):
             rooms = Dict('characteristics/roomCount')(self)
             if len(rooms):
                 details['rooms'] = rooms[0]
-            details['available'] = Dict('characteristics/available')(self)
+            details['available'] = Dict('characteristics/available', default=NotAvailable)(self)
             return details
 
     def get_total_page(self):

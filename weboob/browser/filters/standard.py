@@ -46,7 +46,7 @@ __all__ = ['FilterError', 'ColumnNotFound', 'RegexpError', 'ItemNotFound',
            'Filter', 'Base', 'Env', 'TableCell', 'RawText',
            'CleanText', 'Lower', 'CleanDecimal', 'Field', 'Regexp', 'Map',
            'DateTime', 'Date', 'Time', 'DateGuesser', 'Duration',
-           'MultiFilter', 'CombineDate', 'Format', 'Join', 'Type',
+           'MultiFilter', 'CombineDate', 'Format', 'Join', 'Type', 'Eval',
            'BrowserURL', 'Async', 'AsyncLoad']
 
 
@@ -193,7 +193,7 @@ class _Selector(Filter):
 class AsyncLoad(Filter):
     def __call__(self, item):
         link = self.select(self.selector, item, key=self._key, obj=self._obj)
-        return item.page.browser.async_open(link)
+        return item.page.browser.async_open(link) if link else None
 
 
 class Async(_Filter):
@@ -209,6 +209,9 @@ class Async(_Filter):
         return self
 
     def __call__(self, item):
+        if item.loaders[self.name] is None:
+            return None
+
         result = item.loaders[self.name].result()
         assert result.page is not None, 'The loaded url %s hasn\'t been matched by an URL object' % result.url
         return self.selector(result.page.doc)
@@ -422,6 +425,14 @@ class CleanDecimal(CleanText):
             return self.default_or_raise(e)
 
 
+class Slugify(Filter):
+    @debug()
+    def filter(self, label):
+        label = re.sub(r'[^A-Za-z0-9]', ' ', label.lower()).strip()
+        label = re.sub(r'\s+', '-', label)
+        return label
+
+
 class Type(Filter):
     """
     Get a cleaned value of any type from an element text.
@@ -628,7 +639,7 @@ class Time(Filter):
 
 class Duration(Time):
     klass = datetime.timedelta
-    regexp = re.compile(r'((?P<hh>\d+)[:;])?(?P<mm>\d+)[;:](?P<ss>\d+)')
+    _regexp = re.compile(r'((?P<hh>\d+)[:;])?(?P<mm>\d+)[;:](?P<ss>\d+)')
     kwargs = {'hours': 'hh', 'minutes': 'mm', 'seconds': 'ss'}
 
 
@@ -682,18 +693,47 @@ class BrowserURL(MultiFilter):
 
 
 class Join(Filter):
-    def __init__(self, pattern, selector=None, textCleaner=CleanText):
+    def __init__(self, pattern, selector=None, textCleaner=CleanText, newline=False, addBefore='', addAfter=''):
         super(Join, self).__init__(selector)
         self.pattern = pattern
         self.textCleaner = textCleaner
+        self.newline = newline
+        self.addBefore = addBefore
+        self.addAfter = addAfter
 
     @debug()
     def filter(self, el):
-        res = u''
-        for li in el:
-            res += self.pattern % self.textCleaner.clean(li)
+        items = [self.textCleaner.clean(e) for e in el]
+        items = [item for item in items if item]
 
-        return res
+        if self.newline:
+            items = ['%s\r\n' % item for item in items]
+
+        result = self.pattern.join(items)
+
+        if self.addBefore:
+            result = '%s%s' % (self.addBefore, result)
+
+        if self.addAfter:
+            result = '%s%s' % (result, self.addAfter)
+
+        return result
+
+class Eval(MultiFilter):
+    """
+    Evaluate a function with given 'deferred' arguments.
+
+    >>> F = Field; Eval(lambda a, b, c: a * b + c, F('foo'), F('bar'), F('baz')) # doctest: +SKIP
+    >>> Eval(lambda x, y: x * y + 1).filter([3, 7])
+    22
+    """
+    def __init__(self, func, *args):
+        super(Eval, self).__init__(*args)
+        self.func = func
+
+    @debug()
+    def filter(self, values):
+        return self.func(*values)
 
 
 def test_CleanText():

@@ -36,14 +36,16 @@ __all__ = ['CICBrowser']
 class CICBrowser(Browser):
     PROTOCOL = 'https'
     DOMAIN = 'www.cic.fr'
-    CERTHASH = '3116c834a9877ece7488462ce7a43e27fa81e6768a8db143032b9f607b9a3f20'
+    CERTHASH = '9f41522275058310a6fb348504daeadd16ae852a686a91383b10ad045da76d29'
     ENCODING = 'iso-8859-1'
     USER_AGENT = Browser.USER_AGENTS['wget']
     PAGES = {'https://www.cic.fr/.*/fr/banques/particuliers/index.html':   LoginPage,
              'https://www.cic.fr/.*/fr/identification/default.cgi': LoginErrorPage,
              'https://www.cic.fr/.*/fr/banque/situation_financiere.cgi': AccountsPage,
+             'https://www.cic.fr/.*/fr/banque/situation_financiere.html': AccountsPage,
              'https://www.cic.fr/.*/fr/banque/espace_personnel.aspx': UserSpacePage,
              'https://www.cic.fr/.*/fr/banque/mouvements.cgi.*': OperationsPage,
+             'https://www.cic.fr/.*/fr/banque/mouvements.html.*': OperationsPage,
              'https://www.cic.fr/.*/fr/banque/mvts_instance.cgi.*': ComingPage,
              'https://www.cic.fr/.*/fr/banque/nr/nr_devbooster.aspx.*': OperationsPage,
              'https://www.cic.fr/.*/fr/banque/operations_carte\.cgi.*': CardPage,
@@ -101,7 +103,7 @@ class CICBrowser(Browser):
         self.currentSubBank = url.path.lstrip('/').split('/')[0]
 
     def list_operations(self, page_url):
-        if page_url.startswith('/'):
+        if page_url.startswith('/') or page_url.startswith('https'):
             self.location(page_url)
         else:
             self.location('https://%s/%s/fr/banque/%s' % (self.DOMAIN, self.currentSubBank, page_url))

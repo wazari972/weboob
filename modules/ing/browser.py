@@ -16,14 +16,16 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
+import re
 import hashlib
+import time
 
 from weboob.browser import LoginBrowser, URL, need_login
 from weboob.exceptions import BrowserIncorrectPassword, ParseError
 from weboob.capabilities.bank import Account, TransferError
 
 from .pages import AccountsList, LoginPage, TitrePage, TitreHistory,\
-    TransferPage, TransferConfirmPage, BillsPage, StopPage
+    TransferPage, TransferConfirmPage, BillsPage, StopPage, TitreDetails
 
 
 __all__ = ['IngBrowser']
@@ -51,6 +53,7 @@ class IngBrowser(LoginBrowser):
     transferpage = URL('/protected/pages/cc/transfer/transferManagement.jsf', TransferPage)
     dotransferpage = URL('/general\?command=DisplayDoTransferCommand', TransferPage)
     valtransferpage = URL('/protected/pages/cc/transfer/create/transferCreateValidation.jsf', TransferConfirmPage)
+    titredetails = URL('/general\?command=display.*', TitreDetails)
     # CapBank-Market
     starttitre = URL('/general\?command=goToAccount&zone=COMPTE', TitrePage)
     titrepage = URL('https://bourse.ingdirect.fr/priv/portefeuille-TR.php', TitrePage)
@@ -59,8 +62,10 @@ class IngBrowser(LoginBrowser):
     # CapBill
     billpage = URL('/protected/pages/common/estatement/eStatement.jsf', BillsPage)
 
+    __states__ = ['where']
+
     def __init__(self, *args, **kwargs):
-        self.birthday = kwargs.pop('birthday', None)
+        self.birthday = re.sub(r'[^\d]', '', kwargs.pop('birthday'))
         self.where = None
         LoginBrowser.__init__(self, *args, **kwargs)
 
@@ -71,7 +76,8 @@ class IngBrowser(LoginBrowser):
         assert self.password.isdigit()
         assert self.birthday.isdigit()
 
-        self.loginpage.stay_or_go()
+        self.do_logout()
+        self.loginpage.go()
 
         self.page.prelogin(self.username, self.birthday)
         self.page.login(self.password)
@@ -116,7 +122,7 @@ class IngBrowser(LoginBrowser):
     @need_login
     @check_bourse
     def get_history(self, account):
-        if account.type == Account.TYPE_MARKET:
+        if account.type in (Account.TYPE_MARKET, Account.TYPE_LIFE_INSURANCE):
             for result in self.get_history_titre(account):
                 yield result
             return
@@ -225,24 +231,53 @@ class IngBrowser(LoginBrowser):
                 "javax.faces.ViewState": account._jid,
                 "cptnbr": account._id
                 }
-        self.accountspage.go(data=data)
+
+        # On ASV pages, data maybe not available.
+        for i in range(5):
+            if i > 0:
+                self.logger.debug('Investments list empty, retrying in %s seconds...', (2**i))
+                time.sleep(2**i)
+
+                if i > 1:
+                    self.do_logout()
+                    self.do_login()
+                    self.accountspage.go()
+
+            self.accountspage.go(data=data)
+
+            if not self.page.has_error():
+                break
+
+        else:
+            self.logger.warning("Unable to get investments list...")
+
+        if self.page.is_asv:
+            return
 
         self.starttitre.go()
         self.where = u"titre"
         self.titrepage.go()
 
+    @need_login
+    @check_bourse
     def get_investments(self, account):
-        if account.type != Account.TYPE_MARKET:
+        if account.type not in (Account.TYPE_MARKET, Account.TYPE_LIFE_INSURANCE):
             raise NotImplementedError()
         self.go_investments(account)
 
-        self.titrerealtime.go()
+        if self.where == u'titre':
+            self.titrerealtime.go()
         return self.page.iter_investments()
 
     def get_history_titre(self, account):
         self.go_investments(account)
-        self.titrehistory.go()
-        return self.page.iter_history()
+
+        if self.where == u'titre':
+            self.titrehistory.go()
+            return self.page.iter_history()
+        else:
+            # No history for ASV accounts.
+            raise NotImplementedError()
 
     ############# CapBill #############
     @need_login

@@ -94,7 +94,7 @@ class EncoursCBPage(LoggedPage, HTMLPage):
             obj_currency = u'EUR'
 
             obj__credit_card_account = True
-            
+
 class Transaction(FrenchTransaction):
     PATTERNS = [(re.compile('^(?P<text>RETRAIT DAB) (?P<dd>\d{2})-(?P<mm>\d{2})-([\d\-]+)'),
                                                             FrenchTransaction.TYPE_WITHDRAWAL),
@@ -104,8 +104,9 @@ class Transaction(FrenchTransaction):
                                                             FrenchTransaction.TYPE_CARD),
                 (re.compile('^VIR COOPA (?P<dd>\d{2})/(?P<mm>\d{2}) (?P<text>.*)'),
                                                             FrenchTransaction.TYPE_TRANSFER),
-                (re.compile('^SDD RECU (TRANSFRONTALIER|NATIONAL)? (?P<text>.*)'),
-                                                            FrenchTransaction.TYPE_TRANSFER),
+                (re.compile('^COOPA (?P<dd>\d{2})/(?P<mm>\d{2}) (?P<text>.*)'),
+FrenchTransaction.TYPE_TRANSFER),
+                (re.compile('^SDD RECU (TRANSFRONTALIER|NATIONAL)? (?P<text>.*)'),                                            FrenchTransaction.TYPE_TRANSFER),
                 (re.compile('^VIR(EMENT|EMT| SEPA EMET :)? (?P<text>.*?)(- .*)?$'),
                                                             FrenchTransaction.TYPE_TRANSFER),
                 (re.compile('^(PRLV|PRELEVEMENT) SEPA (?P<text>.*?)(- .*)?$'),
@@ -150,7 +151,6 @@ class TransactionsJSONPage(LoggedPage, JsonPage):
                     text += label
             except IndexError:
                 pass
-            
             t = Transaction(0)
             t.parse(tr[self.ROW_DATE], text)
             t.set_amount(tr[self.ROW_CREDIT], tr[self.ROW_DEBIT])
@@ -179,12 +179,10 @@ class ComingTransactionsPage(LoggedPage, HTMLPage):
 
             txt = txt[start+len(pattern):start+txt[start:].find(';')]
             data = json.loads(txt)
-            
             # credit card COMING purchases entries contain a link,
             # we don't want them in this list, they have an account
             # on their own in Browser.CreditCooperatif.get_accounts_list
             data = [entry for entry in data if "</a>" not in entry[1]]
-            
             break
 
         for tr in data:
@@ -237,4 +235,3 @@ class ComingCBTransactionsPage(LoggedPage, HTMLPage):
             else:
                 t.set_amount(debit=tr[self.ROW_DEBIT])
             yield t
-            

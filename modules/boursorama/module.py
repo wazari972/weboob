@@ -41,19 +41,15 @@ class BoursoramaModule(Module, CapBank):
                            ValueBackendPassword('password',   label='Mot de passe'),
                            ValueBool('enable_twofactors',     label='Send validation sms', default=False),
                            Value('device',                    label='Device name', regexp='\w*', default=''),
+                           Value('pin_code',                  label='Sms code', required=False),
                           )
     BROWSER = Boursorama
 
     def create_default_browser(self):
-        return self.create_browser(
-            self.config["device"].get()
-            , self.config["enable_twofactors"].get()
-            , self.config['login'].get()
-            , self.config['password'].get())
+        return self.create_browser(self.config)
 
     def iter_accounts(self):
-        for account in self.browser.get_accounts_list():
-            yield account
+        return self.browser.get_accounts_list()
 
     def get_account(self, _id):
         with self.browser:
@@ -64,17 +60,7 @@ class BoursoramaModule(Module, CapBank):
             raise AccountNotFound()
 
     def iter_history(self, account):
-        with self.browser:
-            for history in self.browser.get_history(account):
-                yield history
+        return self.browser.get_history(account)
 
     def iter_investment(self, account):
-        with self.browser:
-            for investment in self.browser.get_investment(account):
-                yield investment
-
-    # TODO
-    #def iter_coming(self, account):
-    #    with self.browser:
-    #        for coming in self.browser.get_coming_operations(account):
-    #            yield coming
+        return self.browser.get_investment(account)

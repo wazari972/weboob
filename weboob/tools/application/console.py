@@ -32,7 +32,7 @@ from weboob.capabilities.account import CapAccount, Account, AccountRegisterErro
 from weboob.core.backendscfg import BackendAlreadyExists
 from weboob.core.modules import ModuleLoadError
 from weboob.core.repositories import ModuleInstallError, IProgress
-from weboob.exceptions import BrowserUnavailable, BrowserIncorrectPassword, BrowserForbidden, BrowserSSLError
+from weboob.exceptions import BrowserUnavailable, BrowserIncorrectPassword, BrowserForbidden, BrowserSSLError, BrowserQuestion
 from weboob.tools.value import Value, ValueBool, ValueFloat, ValueInt, ValueBackendPassword
 from weboob.tools.misc import to_unicode
 from weboob.tools.ordereddict import OrderedDict
@@ -119,7 +119,7 @@ class ConsoleApplication(Application):
         ret = super(ConsoleApplication, self).load_backends(*args, **kwargs)
 
         for err in errors:
-            print('Error(%s): %s' % (err.backend_name, err), file=self.stderr)
+            print(u'Error(%s): %s' % (err.backend_name, err), file=self.stderr)
             if self.ask('Do you want to reconfigure this backend?', default=True):
                 self.edit_backend(err.backend_name)
                 self.load_backends(names=[err.backend_name])
@@ -173,7 +173,7 @@ class ConsoleApplication(Application):
                     continue
                 name = modules[i]
                 try:
-                    inst = self.add_backend(name, default_config)
+                    inst = self.add_backend(name, name, default_config)
                     if inst:
                         self.load_backends(names=[inst])
                 except (KeyboardInterrupt, EOFError):
@@ -183,7 +183,7 @@ class ConsoleApplication(Application):
                     for name in modules:
                         if name in [b.NAME for b in self.weboob.iter_backends()]:
                             continue
-                        inst = self.add_backend(name, default_config)
+                        inst = self.add_backend(name, name, default_config)
                         if inst:
                             self.load_backends(names=[inst])
                 except (KeyboardInterrupt, EOFError):
@@ -297,7 +297,7 @@ class ConsoleApplication(Application):
                 backend_config[key] = value.get()
 
         if ask_add and self.ask('Do you want to add the new register account?', default=True):
-            return self.add_backend(name, backend_config, ask_register=False)
+            return self.add_backend(name, name, backend_config, ask_register=False)
 
         return backend_config
 
@@ -312,9 +312,9 @@ class ConsoleApplication(Application):
         return True
 
     def edit_backend(self, name, params=None):
-        return self.add_backend(name, params, True)
+        return self.add_backend(name, name, params, True)
 
-    def add_backend(self, name, params=None, edit=False, ask_register=True):
+    def add_backend(self, module_name, backend_name, params=None, edit=False, ask_register=True):
         if params is None:
             params = {}
 
@@ -322,22 +322,22 @@ class ConsoleApplication(Application):
         config = None
         try:
             if not edit:
-                minfo = self.weboob.repositories.get_module_info(name)
+                minfo = self.weboob.repositories.get_module_info(module_name)
                 if minfo is None:
-                    raise ModuleLoadError(name, 'Module does not exist')
+                    raise ModuleLoadError(module_name, 'Module does not exist')
                 if not minfo.is_installed():
                     print('Module "%s" is available but not installed.' % minfo.name)
                     self.install_module(minfo)
-                module = self.weboob.modules_loader.get_or_load_module(name)
+                module = self.weboob.modules_loader.get_or_load_module(module_name)
                 config = module.config
             else:
-                bname, items = self.weboob.backends_config.get_backend(name)
+                bname, items = self.weboob.backends_config.get_backend(backend_name)
                 module = self.weboob.modules_loader.get_or_load_module(bname)
                 items.update(params)
                 params = items
-                config = module.config.load(self.weboob, bname, name, params, nofail=True)
+                config = module.config.load(self.weboob, bname, backend_name, params, nofail=True)
         except ModuleLoadError as e:
-            print('Unable to load module "%s": %s' % (name, e), file=self.stderr)
+            print('Unable to load module "%s": %s' % (module_name, e), file=self.stderr)
             return 1
 
         # ask for params non-specified on command-line arguments
@@ -351,28 +351,32 @@ class ConsoleApplication(Application):
             if key not in params or edit:
                 params[key] = self.ask(value, default=params[key] if (key in params) else value.default)
             else:
-                print(u' [%s] %s: %s' % (key, value.description, '(masked)' if value.masked else to_unicode(params[key])))
+                print(u'[%s] %s: %s' % (key, value.description, '(masked)' if value.masked else to_unicode(params[key])))
         if asked_config:
             print('-------------------------%s' % ('-' * len(module.name)))
 
-        while not edit and self.weboob.backends_config.backend_exists(name):
-            print('Backend instance "%s" already exists in "%s"' % (name, self.weboob.backends_config.confpath), file=self.stderr)
-            if not self.ask('Add new backend for module "%s"?' % module.name, default=False):
+        i = 2
+        while not edit and self.weboob.backends_config.backend_exists(backend_name):
+            if not self.ask('Backend "%s" already exists. Add a new one for module %s?' % (backend_name, module.name), default=False):
                 return 1
 
-            name = self.ask('Please give new instance name', default='%s2' % name, regexp=r'^[\w\-_]+$')
+            backend_name = backend_name.rstrip('0123456789')
+            while self.weboob.backends_config.backend_exists('%s%s' % (backend_name, i)):
+                i += 1
+            backend_name = self.ask('Please give new instance name', default='%s%s' % (backend_name, i), regexp=r'^[\w\-_]+$')
 
         try:
-            config = config.load(self.weboob, module.name, name, params, nofail=True)
+            config = config.load(self.weboob, module.name, backend_name, params, nofail=True)
             for key, value in params.iteritems():
-                if key.startswith('_'):
+                if key not in config:
                     continue
                 config[key].set(value)
+
             config.save(edit=edit)
-            print('Backend "%s" successfully %s.' % (name, 'edited' if edit else 'added'))
-            return name
+            print('Backend "%s" successfully %s.' % (backend_name, 'edited' if edit else 'added'))
+            return backend_name
         except BackendAlreadyExists:
-            print('Backend "%s" already exists.' % name, file=self.stderr)
+            print('Backend "%s" already exists.' % backend_name, file=self.stderr)
             return 1
 
     def ask(self, question, default=None, masked=None, regexp=None, choices=None, tiny=None):
@@ -547,7 +551,12 @@ class ConsoleApplication(Application):
 
         This method can be overrided to support more exceptions types.
         """
-        if isinstance(error, BrowserIncorrectPassword):
+        if isinstance(error, BrowserQuestion):
+            for field in error.fields:
+                v = self.ask(field)
+                if v:
+                    backend.config[field.id].set(v)
+        elif isinstance(error, BrowserIncorrectPassword):
             msg = unicode(error)
             if not msg:
                 msg = 'invalid login/password.'

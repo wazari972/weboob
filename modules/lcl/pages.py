@@ -28,9 +28,10 @@ from cStringIO import StringIO
 from weboob.capabilities.bank import Account
 from weboob.browser.elements import method, ListElement, ItemElement, SkipItem
 from weboob.exceptions import ParseError
-from weboob.browser.pages import LoggedPage, HTMLPage, FormNotFound
+from weboob.browser.pages import LoggedPage, HTMLPage, FormNotFound, pagination
+from weboob.browser.filters.html import Attr
 from weboob.browser.filters.standard import CleanText, Field, Regexp, Format, \
-                                            CleanDecimal, Map
+                                            CleanDecimal, Map, AsyncLoad, Async
 from weboob.exceptions import BrowserUnavailable
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction
 from weboob.tools.captcha.virtkeyboard import MappedVirtKeyboard, VirtKeyboardError
@@ -188,7 +189,7 @@ class AccountsPage(LoggedPage, HTMLPage):
 class Transaction(FrenchTransaction):
     PATTERNS = [(re.compile('^(?P<category>CB) (?P<text>RETRAIT) DU (?P<dd>\d+)/(?P<mm>\d+)'),
                                                             FrenchTransaction.TYPE_WITHDRAWAL),
-                (re.compile('^(?P<category>(PRLV|PE)) (?P<text>.*)'),
+                (re.compile('^(?P<category>(PRLV|PE)( SEPA)?) (?P<text>.*)'),
                                                             FrenchTransaction.TYPE_ORDER),
                 (re.compile('^(?P<category>CHQ\.) (?P<text>.*)'),
                                                             FrenchTransaction.TYPE_CHECK),
@@ -209,31 +210,50 @@ class Transaction(FrenchTransaction):
                 (re.compile('^(?P<text>(?P<category>TRAIT\..*?)\s*.*)'),   FrenchTransaction.TYPE_BANK),
                 (re.compile('^(?P<category>REM CHQ) (?P<text>.*)'), FrenchTransaction.TYPE_DEPOSIT),
                ]
-
+class Pagination(object):
+    def next_page(self):
+        links = self.page.doc.xpath('//div[@class="pagination"] /a')
+        if len(links) == 0:
+            return
+        for link in links:
+            if link.xpath('./span')[0].text == 'Page suivante':
+                return link.attrib.get('href')
+        return
 
 class AccountHistoryPage(LoggedPage, HTMLPage):
-    @method
-    class _get_operations(Transaction.TransactionsElement):
+    class _get_operations(Pagination, Transaction.TransactionsElement):
         item_xpath = '//table[has-class("tagTab") and (not(@style) or @style="")]/tr'
         head_xpath = '//table[has-class("tagTab") and (not(@style) or @style="")]/tr/th'
 
         col_raw = [u'Vos opérations', u'Libellé']
 
         class item(Transaction.TransactionElement):
+            load_details = Attr('.', 'href', default=None) & AsyncLoad
             def condition(self):
                 return self.parent.get_colnum('date') is not None and \
                        len(self.el.findall('td')) >= 3 and \
+                       self.el.get('class') and \
                        not 'tableTr' in self.el.get('class')
 
             def validate(self, obj):
-                return obj.category != 'RELEVE CB'
+                if obj.category == 'RELEVE CB':
+                    return
 
+                raw = Async('details', CleanText(u'//td[contains(text(), "Libellé")]/following-sibling::*[1]', default=obj.raw))(self)
+                if raw:
+                    obj.raw = raw
+                return True
+
+    @pagination
     def get_operations(self):
-        return self._get_operations()
+        return self._get_operations(self)()
 
 
 class CBHistoryPage(AccountHistoryPage):
     def get_operations(self):
+        def validate(self, obj):
+            return True
+        self._get_operations.item.validate = validate
         for tr in AccountHistoryPage.get_operations(self):
             tr.type = tr.TYPE_CARD
             yield tr

@@ -40,7 +40,7 @@ class AccountsList(Page):
                 account._link_id = None
                 if 'assurance vie' in block_title:
                     # Life insurance accounts are investments
-                    account.type = Account.TYPE_MARKET
+                    account.type = Account.TYPE_LIFE_INSURANCE
                 for td in tr.getiterator('td'):
                     if td.get('class', '') == 'account-cb':
                         try:
@@ -50,6 +50,17 @@ class AccountsList(Page):
                             break
                         account.type = Account.TYPE_CARD
                         account.label, account.id = [s.strip() for s in self.parser.tocleanstring(td).rsplit('-', 1)]
+
+                        # Sometimes there is text after the card number:
+                        #   <a class="gras" href="/comptes/banque/cartes/index.phtml?CompteCourant=ulietuliedtlueditluedt&amp;currentCB=ruisecruicertuci">
+                        #   CARTE PREMIER                            </a>
+                        #   <br>MACHIN BIDULE TRUC - 1111********1111
+                        #
+                        #   <br>
+                        #   <strong><a href="/aide/faq/index.phtml?document_id=472">Son échéance est le <span style="color:#ff8400; font-weight:bold;">31/03/2015</span>.<br>En savoir plus</a></strong>
+                        # So we have to remove all the shit after it.
+                        account.id = account.id.split(' ')[0]
+
                         try:
                             account._link_id = td.xpath('.//a')[0].get('href')
                         except KeyError:
@@ -73,7 +84,7 @@ class AccountsList(Page):
                         for a in td.getiterator('a'):
                             # For normal account, two "account-more-actions"
                             # One for the account, one for the credit card. Take the good one
-                            if "mouvements.phtml" in a.get('href') and "/cartes/" not in a.get('href'):
+                            if 'href' in a.attrib and "mouvements.phtml" in a.get('href') and "/cartes/" not in a.get('href'):
                                 account._link_id = a.get('href')
 
                     elif td.get('class', '') == 'account-number':
@@ -93,8 +104,7 @@ class AccountsList(Page):
                             account.balance = Decimal(balance)
                         else:
                             account.balance = Decimal(0)
-
                 else:
                     # because of some weird useless <tr>
-                    if account.id is not None:
+                    if account.id is not None and (not account._link_id or not 'moneycenter' in account._link_id):
                         yield account

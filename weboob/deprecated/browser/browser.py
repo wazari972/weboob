@@ -33,6 +33,9 @@ try:
 except ImportError:
     raise ImportError('Please install python-mechanize')
 
+import pickle
+import base64
+import zlib
 import os
 import re
 from threading import RLock
@@ -58,7 +61,7 @@ from weboob.deprecated.browser.parsers import get_parser
 
 __all__ = ['BrowserIncorrectPassword', 'BrowserForbidden', 'BrowserBanned', 'BrowserUnavailable', 'BrowserRetry',
            'BrowserPasswordExpired', 'BrowserHTTPNotFound', 'BrowserHTTPError', 'BrokenPageError', 'Page',
-           'StandardBrowser', 'Browser']
+           'StandardBrowser', 'Browser', 'StateBrowser']
 
 
 class BrowserRetry(Exception):
@@ -628,12 +631,7 @@ class Browser(StandardBrowser):
                 response.set_data(data)
         mechanize.Browser._set_response(self, response, *args, **kwargs)
 
-    def _change_location(self, result, no_login=False):
-        """
-        This function is called when we have moved to a page, to load a Page
-        object.
-        """
-
+    def get_page(self, result):
         # Find page from url
         pageCls = None
         parser = None
@@ -662,19 +660,29 @@ class Browser(StandardBrowser):
 
         # Not found
         if not pageCls:
-            self.page = None
-            self.logger.warning('There isn\'t any page corresponding to URL %s' % result.geturl())
+            self.logger.warning('There isn\'t any page corresponding to URL %s', result.geturl())
             self.save_response(result, warning=True)
             return
 
-        self.logger.debug('[user_id=%s] Went on %s' % (self.username, result.geturl()))
+        self.logger.debug('[user_id=%s] Went on %s', self.username, result.geturl())
         self.last_update = time.time()
 
         if self.logger.settings['save_responses']:
             self.save_response(result)
 
         document = self.get_document(result, parser, encoding=pageCls.ENCODING)
-        self.page = pageCls(self, document, result.geturl(), groups=page_groups, group_dict=page_group_dict, logger=self.logger)
+        return pageCls(self, document, result.geturl(), groups=page_groups, group_dict=page_group_dict, logger=self.logger)
+
+    def _change_location(self, result, no_login=False):
+        """
+        This function is called when we have moved to a page, to load a Page
+        object.
+        """
+
+        self.page = self.get_page(result)
+
+        if not self.page:
+            return
 
         if not no_login and self.password is not None and not self.is_logged():
             self.logger.debug('!! Relogin !!')
@@ -685,6 +693,48 @@ class Browser(StandardBrowser):
 
         if self._cookie:
             self._cookie.save()
+
+
+class StateBrowser(Browser):
+    """
+    This browser aims to store state (cookies, location and attributes).
+    """
+
+    __states__ = []
+    """
+    Saved state variables.
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs['get_home'] = False
+        Browser.__init__(self, *args, **kwargs)
+
+    def load_state(self, state):
+        if 'cookies' in state:
+            try:
+                cookies = pickle.loads(zlib.decompress(base64.b64decode(state['cookies'])))
+            except (TypeError, zlib.error, EOFError, ValueError):
+                self.logger.error('Unable to reload cookies from storage')
+            else:
+                self.set_cookiejar(cookies)
+                self.logger.info('Reloaded cookies from storage')
+        for attrname in self.__states__:
+            if attrname in state:
+                setattr(self, attrname, state[attrname])
+        if 'url' in state:
+            self.location(state['url'], nologin=True)
+
+
+    def dump_state(self):
+        state = {}
+        cookiejar = self._ua_handlers["_cookies"].cookiejar
+        state['cookies'] = base64.b64encode(zlib.compress(pickle.dumps(cookiejar, -1)))
+        for attrname in self.__states__:
+            state[attrname] = getattr(self, attrname)
+        if self.page:
+            state['url'] = self.page.url
+        self.logger.info('Stored cookies into storage')
+        return state
 
 
 def mywrap_socket(sock, *args, **kwargs):

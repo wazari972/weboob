@@ -18,6 +18,7 @@
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
 
+
 class BrowserIncorrectPassword(Exception):
     pass
 
@@ -36,6 +37,14 @@ class BrowserPasswordExpired(BrowserIncorrectPassword):
 
 class BrowserUnavailable(Exception):
     pass
+
+
+class BrowserQuestion(BrowserIncorrectPassword):
+    """
+    When raised by a browser,
+    """
+    def __init__(self, *fields):
+        self.fields = fields
 
 
 class BrowserHTTPNotFound(BrowserUnavailable):

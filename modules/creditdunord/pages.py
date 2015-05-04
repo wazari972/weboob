@@ -88,7 +88,7 @@ class AccountsPage(CDNBasePage):
 
     def get_account_type(self, label):
         for pattern, actype in self.TYPES.iteritems():
-            if label.startswith(pattern):
+            if label.startswith(pattern) or label.endswith(pattern):
                 return actype
 
         return Account.TYPE_UNKNOWN
@@ -150,6 +150,10 @@ class ProAccountsPage(AccountsPage):
         for sub in re.findall("'([^']*)'", text):
             l.append(sub)
 
+        if len(l) <= 1:
+             #For account that have no history
+            return None, None
+
         kind = self.group_dict['kind']
         url = '/vos-comptes/IPT/appmanager/transac/' + kind + '?_nfpb=true&_windowLabel=portletInstance_18&_pageLabel=page_synthese_v1' + '&_cdnCltUrl=' + "/transacClippe/" + quote(l.pop(0))
         args = {}
@@ -172,7 +176,7 @@ class ProAccountsPage(AccountsPage):
             cols = tr.findall('td')
 
             a = Account()
-            a.id = cols[self.COL_ID].xpath('.//span[@class="right-underline"]')[0].text.strip()
+            a.id = cols[self.COL_ID].xpath('.//span[@class="right-underline"]')[0].text.replace(' ', '').strip()
             a.label = unicode(cols[self.COL_ID].xpath('.//span[@class="left-underline"]')[0].text.strip())
             a.type = self.get_account_type(a.label)
             balance = self.parser.tocleanstring(cols[self.COL_BALANCE])

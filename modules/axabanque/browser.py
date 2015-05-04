@@ -21,8 +21,9 @@
 import urllib
 
 from weboob.deprecated.browser import Browser, BrowserIncorrectPassword
+from weboob.deprecated.browser.parsers.jsonparser import JsonParser
 
-from .pages import LoginPage, AccountsPage, TransactionsPage, CBTransactionsPage, UnavailablePage
+from .pages import LoginPage, PostLoginPage, AccountsPage, TransactionsPage, CBTransactionsPage, UnavailablePage, PredisconnectedPage
 
 
 __all__ = ['AXABanque']
@@ -31,9 +32,11 @@ __all__ = ['AXABanque']
 class AXABanque(Browser):
     PROTOCOL = 'https'
     DOMAIN = 'www.axabanque.fr'
-    PAGES = {'https?://www.axabanque.fr/connexion/index.html.*':                            LoginPage,
+    PAGES = {'https?://www.axa.fr/.sendvirtualkeyboard.json':                               (LoginPage, JsonParser()),
+             'https?://www.axa.fr/.loginAxa.json':                                          (PostLoginPage, JsonParser()),
              'https?://www.axabanque.fr/login_errors/indisponibilite.*':                    UnavailablePage,
              'https?://www.axabanque.fr/.*page-indisponible.html.*':                        UnavailablePage,
+             'https?://www.axa.fr/axa-predisconnect.html':                                  PredisconnectedPage,
              'https?://www.axabanque.fr/transactionnel/client/liste-comptes.html':          AccountsPage,
              'https?://www.axabanque.fr/webapp/axabanque/jsp/panorama.faces':               TransactionsPage,
              'https?://www.axabanque.fr/webapp/axabanque/jsp/detailCarteBleu.*.faces':      CBTransactionsPage,
@@ -61,16 +64,23 @@ class AXABanque(Browser):
             return
 
         if not self.is_on_page(LoginPage):
-            self.location('/connexion/index.html', no_login=True)
+            self.location('https://www.axa.fr/.sendvirtualkeyboard.json', data=urllib.urlencode({'login': self.username}), no_login=True)
 
         self.page.login(self.username, self.password)
 
-        if not self.is_logged():
+        if not self.is_on_page(PostLoginPage):
+            raise BrowserIncorrectPassword()
+
+        if not self.page.redirect():
             raise BrowserIncorrectPassword()
 
     def get_accounts_list(self):
         if not self.is_on_page(AccountsPage):
             self.location('/transactionnel/client/liste-comptes.html')
+
+        if self.page.is_password_expired():
+            raise BrowserIncorrectPassword()
+
         return self.page.get_list()
 
     def get_account(self, id):
@@ -86,6 +96,9 @@ class AXABanque(Browser):
     def get_history(self, account):
         if not self.is_on_page(AccountsPage):
             account = self.get_account(account.id)
+
+        if self.page.is_password_expired():
+            raise BrowserIncorrectPassword()
 
         args = account._args
         args['javax.faces.ViewState'] = self.page.get_view_state()

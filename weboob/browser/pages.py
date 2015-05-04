@@ -23,6 +23,7 @@ import warnings
 from io import BytesIO
 import codecs
 from cgi import parse_header
+import urlparse
 
 import requests
 
@@ -193,7 +194,7 @@ class Page(object):
         overriden in modules pages to preprocess or postprocess data. It must
         return an object -- that will be assigned to :attr:`doc`.
         """
-        raise NotImplemented
+        raise NotImplementedError()
 
     def detect_encoding(self):
         """
@@ -201,6 +202,12 @@ class Page(object):
         declaration, if any (eg. html5's <meta charset="some-charset">).
         """
         return None
+
+    def absurl(self, url):
+        """
+        Get an absolute URL from an a partial URL, relative to the Page URL
+        """
+        return urlparse.urljoin(self.url, url)
 
 
 class FormNotFound(Exception):
@@ -456,12 +463,42 @@ class HTMLPage(Page):
     The class to instanciate when using :meth:`HTMLPage.get_form`. Default to :class:`Form`.
     """
 
+    REFRESH_MAX = None
+    """
+    When handling a "Refresh" meta header, the page considers it only if the sleep
+    time in lesser than this value.
+
+    Default value is None, means refreshes aren't handled.
+    """
+
     def __init__(self, *args, **kwargs):
         import lxml.html as html
         ns = html.etree.FunctionNamespace(None)
         self.define_xpath_functions(ns)
 
         super(HTMLPage, self).__init__(*args, **kwargs)
+
+    def on_load(self):
+        # Default on_load handle "Refresh" meta tag.
+        self.handle_refresh()
+
+    def handle_refresh(self):
+        if self.REFRESH_MAX is None:
+            return
+
+        for refresh in self.doc.xpath('//head/meta[@http-equiv="Refresh"]'):
+            m = self.browser.REFRESH_RE.match(refresh.get('content', ''))
+            if not m:
+                continue
+            url = urlparse.urljoin(self.url, m.groupdict().get('url', None))
+            sleep = float(m.groupdict()['sleep'])
+
+            if sleep <= self.REFRESH_MAX:
+                self.logger.info('Redirecting to %s', url)
+                self.browser.location(url)
+                break
+            else:
+                self.logger.debug('Do not refresh to %s because %s > REFRESH_MAX(%s)' % (url, sleep, self.REFRESH_MAX))
 
     def define_xpath_functions(self, ns):
         """
@@ -471,6 +508,7 @@ class HTMLPage(Page):
         overloaded by children classes to add extra functions.
         """
         ns['lower-case'] = lambda context, args: ' '.join([s.lower() for s in args])
+        ns['replace'] = lambda context, args, old, new: ' '.join([s.replace(old, new) for s in args])
 
         def has_class(context, *classes):
             """
