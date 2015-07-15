@@ -27,7 +27,8 @@ from mechanize import Cookie, FormNotFoundError
 
 from weboob.exceptions import BrowserUnavailable, BrowserIncorrectPassword
 from weboob.deprecated.browser import Page as _BasePage, BrokenPageError
-from weboob.capabilities.bank import Account
+from weboob.capabilities.bank import Account, Investment
+from weboob.capabilities import NotAvailable
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction
 from weboob.tools.json import json
 
@@ -59,6 +60,14 @@ class WikipediaARC4(object):
 class BasePage(_BasePage):
     def get_token(self):
         return self.parser.select(self.document.getroot(), '//form//input[@name="token"]', 1, 'xpath').attrib['value']
+
+    def on_loaded(self):
+        if not self.is_error():
+            self.browser.token = self.get_token()
+            self.logger.debug('Update token to %s', self.browser.token)
+
+    def is_error(self):
+        return False
 
     def build_token(self, token):
         """
@@ -187,6 +196,17 @@ class RedirectPage(BasePage):
         else:
             self.browser.submit(nologin=True)
 
+
+class ErrorPage(BasePage):
+    def get_token(self):
+        try:
+            buf = self.document.xpath('//body/@onload')[0]
+        except IndexError:
+            return
+        else:
+            m = re.search("saveToken\('([^']+)'\)", buf)
+            if m:
+                return m.group(1)
 
 class UnavailablePage(BasePage):
     def on_loaded(self):
@@ -332,6 +352,11 @@ class AccountsPage(BasePage):
 
         return False
 
+    def pop_up(self):
+        if self.document.xpath('//span[contains(text(), "du navigateur Internet.")]'):
+            return True
+        return False
+
     def is_short_list(self):
         return len(self.document.xpath('//script[contains(text(), "EQUIPEMENT_COMPLET")]')) > 0
 
@@ -398,6 +423,7 @@ class AccountsPage(BasePage):
                 account._next_debit = None
                 account._params = None
                 account._coming_params = None
+                account._invest_params = None
                 if balance != u'' and len(tds[3].xpath('.//a')) > 0:
                     account._params = params.copy()
                     account._params['dialogActionPerformed'] = 'SOLDE'
@@ -412,6 +438,12 @@ class AccountsPage(BasePage):
                     if m and m.group(1) != 'EQUIPEMENT_COMPLET':
                         _params['prevAction'] = m.group(1)
                     next_pages.append(_params)
+
+                if not account._params:
+                    account._invest_params = params.copy()
+                    account._invest_params['dialogActionPerformed'] = 'CONTRAT'
+                    account._invest_params['attribute($SEL_$%s)' % tr.attrib['id'].split('_')[0]] = tr.attrib['id'].split('_', 1)[1]
+
                 yield account
 
         # Needed to preserve navigation.
@@ -452,6 +484,7 @@ class CardsPage(BasePage):
                 account.label = u' '.join([self.parser.tocleanstring(cols[self.COL_TYPE]),
                                            self.parser.tocleanstring(cols[self.COL_LABEL])])
                 account._params = None
+                account._invest_params = None
                 account._coming_params = params.copy()
                 account._coming_params['dialogActionPerformed'] = 'SELECTION_ENCOURS_CARTE'
                 account._coming_params['attribute($SEL_$%s)' % tr.attrib['id'].split('_')[0]] = tr.attrib['id'].split('_', 1)[1]
@@ -593,6 +626,8 @@ class TransactionsPage(BasePage):
     def get_card_history(self, account, coming):
         if coming:
             debit_date = account._next_debit
+        elif not hasattr(account, '_prev_balance'):
+            return
         else:
             debit_date = account._prev_debit
             if 'ContinueTask.do' in self.url:
@@ -625,3 +660,88 @@ class TransactionsPage(BasePage):
             return True
 
         return False
+
+    def get_investment_page_params(self):
+        script = self.document.xpath('//body')[0].attrib['onload']
+        url = None
+        m = re.search(r"','(.+?)',\[", script, re.MULTILINE)
+        if m:
+            url = m.group(1)
+        params = {}
+        for key, value in re.findall(r"key:'(?P<key>SJRToken)'\,value:'(?P<value>.*?)'}", script, re.MULTILINE):
+            params[key] = value
+        return url, params if url and params else None
+
+
+class LineboursePage(_BasePage):
+    pass
+
+
+class InvestmentLineboursePage(_BasePage):
+    COL_LABEL = 0
+    COL_QUANTITY = 1
+    COL_UNITVALUE = 2
+    COL_VALUATION = 3
+    COL_UNITPRICE = 4
+    COL_PERF_PERCENT = 5
+    COL_PERF = 6
+    def get_investments(self):
+        for line in self.document.xpath('//table[contains(@summary, "Contenu")]/tbody/tr[@class="color4"]'):
+            cols1 = line.findall('td')
+            cols2 = line.xpath('./following-sibling::tr')[0].findall('td')
+
+            inv = Investment()
+            inv.label = self.parser.tocleanstring(cols1[self.COL_LABEL].xpath('.//span')[0])
+            inv.code = self.parser.tocleanstring(cols1[self.COL_LABEL].xpath('./a')[0]).split(' ')[-1]
+            inv.quantity = self.parse_decimal(cols2[self.COL_QUANTITY])
+            inv.unitprice = self.parse_decimal(cols2[self.COL_UNITPRICE])
+            inv.unitvalue = self.parse_decimal(cols2[self.COL_UNITVALUE])
+            inv.valuation = self.parse_decimal(cols2[self.COL_VALUATION])
+            inv.diff = self.parse_decimal(cols2[self.COL_PERF])
+
+            yield inv
+
+    def parse_decimal(self, string):
+        value = self.parser.tocleanstring(string)
+        if value == '':
+            return NotAvailable
+        return Decimal(Transaction.clean_amount(value))
+
+
+class NatixisPage(_BasePage):
+    def submit_form(self):
+        self.browser.select_form(name="formRoutage")
+        self.browser.submit(nologin=True)
+
+
+class InvestmentNatixisPage(_BasePage):
+    COL_LABEL = 0
+    COL_QUANTITY = 2
+    COL_UNITVALUE = 3
+    COL_VALUATION = 4
+    def get_investments(self):
+        for line in self.document.xpath('//div[@class="row-fluid table-contrat-supports"]/table/tbody[(@class)]/tr'):
+            cols = line.findall('td')
+
+            inv = Investment()
+            inv.label = self.parser.tocleanstring(cols[self.COL_LABEL]).replace('Cas sans risque ', '')
+            inv.quantity = self.parse_decimal(cols[self.COL_QUANTITY])
+            inv.unitvalue = self.parse_decimal(cols[self.COL_UNITVALUE])
+            inv.valuation = self.parse_decimal(cols[self.COL_VALUATION])
+
+            yield inv
+
+    def parse_decimal(self, string):
+        value = self.parser.tocleanstring(string).replace('Si famille fonds generaux, on affiche un tiret', '').replace('Cas sans risque', '').replace(' ', '')
+        if value == '-':
+            return NotAvailable
+        return Decimal(Transaction.clean_amount(value))
+
+class MessagePage(_BasePage):
+    def skip(self):
+        try:
+            self.browser.select_form(name="leForm")
+        except FormNotFoundError:
+            pass
+        else:
+            self.browser.submit(nologin=True)

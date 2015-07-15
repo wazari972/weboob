@@ -18,6 +18,7 @@
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
 
+import requests
 import urllib
 from urlparse import urlsplit, parse_qsl
 
@@ -34,6 +35,7 @@ __all__ = ['LCLBrowser','LCLProBrowser']
 # Browser
 class LCLBrowser(LoginBrowser):
     BASEURL = 'https://particuliers.secure.lcl.fr'
+    VERIFY = False
 
     login = URL('/outil/UAUT/Authentication/authenticate',
                 '/outil/UAUT\?from=.*',
@@ -49,6 +51,7 @@ class LCLBrowser(LoginBrowser):
     accounts = URL('/outil/UWSP/Synthese', AccountsPage)
     history = URL('/outil/UWLM/ListeMouvements.*/accesListeMouvements.*',
                   '/outil/UWLM/DetailMouvement.*/accesDetailMouvement.*',
+                  '/outil/UWLM/Rebond',
                   AccountHistoryPage)
     cb_list = URL('/outil/UWCB/UWCBEncours.*/listeCBCompte.*', CBListPage)
     cb_history = URL('/outil/UWCB/UWCBEncours.*/listeOperations.*', CBHistoryPage)
@@ -57,12 +60,21 @@ class LCLBrowser(LoginBrowser):
 
     TIMEOUT = 30.0
 
+    def __init__(self, *args, **kwargs):
+        if hasattr(requests.packages.urllib3.contrib, 'pyopenssl') \
+           and ':RC4' not in requests.packages.urllib3.contrib.pyopenssl.DEFAULT_SSL_CIPHER_LIST:
+            requests.packages.urllib3.contrib.pyopenssl.DEFAULT_SSL_CIPHER_LIST += ':RC4'
+
+        super(LCLBrowser, self).__init__(*args, **kwargs)
+
     def do_login(self):
         assert isinstance(self.username, basestring)
         assert isinstance(self.password, basestring)
         assert self.password.isdigit()
 
-        self.login.stay_or_go()
+        # we force the browser to go to login page so it's work even
+        # if the session expire
+        self.login.go()
 
         if not self.page.login(self.username, self.password) or \
            (self.login.is_here() and self.page.is_error()) :

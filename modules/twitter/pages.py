@@ -23,7 +23,8 @@ from io import StringIO
 import lxml.html as html
 import urllib
 
-from weboob.browser.pages import HTMLPage, JsonPage, FormNotFound, pagination
+from weboob.tools.json import json
+from weboob.browser.pages import HTMLPage, JsonPage, FormNotFound, pagination, LoggedPage
 from weboob.browser.elements import ListElement, ItemElement, method
 from weboob.browser.filters.standard import CleanText, Format, Regexp, Env, DateTime, Filter
 from weboob.browser.filters.html import Link, Attr
@@ -62,11 +63,14 @@ class TwitterJsonHTMLPage(JsonPage):
 
 class LoginPage(HTMLPage):
     def login(self, login, passwd):
-        form = self.get_form(xpath='//form[@action="https://twitter.com/sessions"]')
-        form['session[username_or_email]'] = login
-        form['session[password]'] = passwd
-        form.submit()
-        return form['authenticity_token']
+        try:
+            form = self.get_form(xpath='//form[@action="https://twitter.com/sessions"]')
+            form['session[username_or_email]'] = login
+            form['session[password]'] = passwd
+            form.submit()
+            return form['authenticity_token']
+        except FormNotFound:
+            return CleanText('(//input[@id="authenticity_token"])[1]/@value')(self.doc)
 
     @property
     def logged(self):
@@ -92,8 +96,7 @@ class ThreadPage(HTMLPage):
                                      replace=[('@ ', '@'), ('# ', '#'), ('http:// ', 'http://')]),
                            CleanText('//div[@class="permalink-inner permalink-tweet-container"]/div/p',
                                      replace=[('@ ', '@'), ('# ', '#'), ('http:// ', 'http://')]))
-
-        obj_date = DateTime(Regexp(CleanText('//div[@class="permalink-inner permalink-tweet-container"]/div/div/div/div[@class="client-and-actions"]/span'),
+        obj_date = DateTime(Regexp(CleanText('//div[@class="permalink-inner permalink-tweet-container"]/div/div/div[@class="client-and-actions"]/span/span'),
                                    '(\d+:\d+).+- (.+\d{4})',
                                    '\\2 \\1'), translations=DATE_TRANSLATE_FR)
 
@@ -112,6 +115,12 @@ class ThreadPage(HTMLPage):
             obj_date = DatetimeFromTimestamp(Attr('./div/div[@class="stream-item-header"]/small/a/span | ./div/div[@class="ProfileTweet-authorDetails"]/span/a/span', 'data-time'))
 
 
+class SearchHomePage(HTMLPage):
+    def get_trends_token(self):
+        json_data = CleanText('//input[@id="init-data"]/@value')(self.doc)
+        return json.loads(json_data)['trendsCacheKey']
+
+
 class TrendsPage(TwitterJsonHTMLPage):
 
     @method
@@ -125,7 +134,7 @@ class TrendsPage(TwitterJsonHTMLPage):
 
 
 class TimelineListElement(ListElement):
-    item_xpath = '//*[@data-item-type="tweet"]/div'
+    item_xpath = '//*[@data-item-type="tweet"]/div[@data-tweet-id]'
     ignore_duplicate = True
 
     def get_last_id(self):
@@ -154,7 +163,7 @@ class TimelinePage(TwitterJsonHTMLPage):
                 return u'%s?max_position=%s' % (self.page.url.split('?')[0], self.get_last_id())
 
 
-class HomeTimelinePage(TwitterJsonHTMLPage):
+class HomeTimelinePage(TwitterJsonHTMLPage, LoggedPage):
     @pagination
     @method
     class iter_threads(TimelineListElement):

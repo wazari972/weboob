@@ -23,7 +23,8 @@ import urllib
 from weboob.deprecated.browser import Browser, BrowserIncorrectPassword, BrokenPageError
 
 from .pages import LoginPage, IndexPage, AccountsPage, AccountsFullPage, CardsPage, TransactionsPage, \
-                   UnavailablePage, RedirectPage, HomePage, Login2Page
+                   UnavailablePage, RedirectPage, HomePage, Login2Page, ErrorPage, \
+                   LineboursePage, NatixisPage, InvestmentNatixisPage, InvestmentLineboursePage, MessagePage
 
 
 __all__ = ['BanquePopulaire']
@@ -43,8 +44,10 @@ class BanquePopulaire(Browser):
              'https://[^/]+/cyber/internet/ContinueTask.do\?.*dialogActionPerformed=ENCOURS_COMPTE.*': CardsPage,
              'https://[^/]+/cyber/internet/ContinueTask.do\?.*dialogActionPerformed=SELECTION_ENCOURS_CARTE.*':   TransactionsPage,
              'https://[^/]+/cyber/internet/ContinueTask.do\?.*dialogActionPerformed=SOLDE.*':   TransactionsPage,
+             'https://[^/]+/cyber/internet/ContinueTask.do\?.*dialogActionPerformed=CONTRAT.*':   TransactionsPage,
              'https://[^/]+/cyber/internet/Page.do\?.*':                                        TransactionsPage,
              'https://[^/]+/cyber/internet/Sort.do\?.*':                                        TransactionsPage,
+             'https://[^/]+/cyber/internet/ContinueTask.do':                                    ErrorPage,
              'https://[^/]+/s3f-web/.*':                                                        UnavailablePage,
              'https://[^/]+/portailinternet/_layouts/Ibp.Cyi.Layouts/RedirectSegment.aspx.*':   RedirectPage,
              'https://[^/]+/portailinternet/Catalogue/Segments/.*.aspx(\?vary=(?P<vary>.*))?':  HomePage,
@@ -52,6 +55,11 @@ class BanquePopulaire(Browser):
              'https://[^/]+/portailinternet/Pages/default.aspx':                                HomePage,
              'https://[^/]+/portailinternet/Transactionnel/Pages/CyberIntegrationPage.aspx':    HomePage,
              'https://[^/]+/WebSSO_BP/_(?P<bankid>\d+)/index.html\?transactionID=(?P<transactionID>.*)': Login2Page,
+             'https://www.linebourse.fr/ReroutageSJR':                                          LineboursePage,
+             'https://www.linebourse.fr/DetailMessage.*':                                       MessagePage,
+             'https://www.linebourse.fr/Portefeuille':                                          InvestmentLineboursePage,
+             'https://www.assurances.natixis.fr/espaceinternet-bp/views/common.*':              NatixisPage,
+             'https://www.assurances.natixis.fr/espaceinternet-bp/views/contrat.*':             InvestmentNatixisPage,
             }
 
     def __init__(self, website, *args, **kwargs):
@@ -82,14 +90,15 @@ class BanquePopulaire(Browser):
         if not self.is_logged():
             raise BrowserIncorrectPassword()
 
-        self.token = self.page.get_token()
-
     ACCOUNT_URLS = ['mesComptes', 'mesComptesPRO', 'maSyntheseGratuite', 'accueilSynthese', 'equipementComplet']
 
     def go_on_accounts_list(self):
         for taskInfoOID in self.ACCOUNT_URLS:
             self.location(self.buildurl('/cyber/internet/StartTask.do', taskInfoOID=taskInfoOID, token=self.token))
             if not self.page.is_error():
+                if self.page.pop_up():
+                    self.logger.debug('Popup displayed, retry')
+                    self.location(self.buildurl('/cyber/internet/StartTask.do', taskInfoOID=taskInfoOID, token=self.token))
                 self.ACCOUNT_URLS = [taskInfoOID]
                 break
         else:
@@ -104,7 +113,6 @@ class BanquePopulaire(Browser):
 
     def get_accounts_list(self):
         self.go_on_accounts_list()
-        self.token = self.page.get_token()
 
         next_pages = []
 
@@ -120,10 +128,10 @@ class BanquePopulaire(Browser):
             if 'prevAction' in next_page:
                 params = self.page.get_params()
                 params['dialogActionPerformed'] = next_page.pop('prevAction')
-                params['token'] = self.page.build_token(self.page.get_token())
+                params['token'] = self.page.build_token(self.token)
                 self.location('/cyber/internet/ContinueTask.do', urllib.urlencode(params))
 
-            next_page['token'] = self.page.build_token(self.page.get_token())
+            next_page['token'] = self.page.build_token(self.token)
             self.location('/cyber/internet/ContinueTask.do', urllib.urlencode(next_page))
 
             for a in self.page.iter_accounts(next_pages):
@@ -152,9 +160,8 @@ class BanquePopulaire(Browser):
         params['token'] = self.page.build_token(params['token'])
 
         self.location('/cyber/internet/ContinueTask.do', urllib.urlencode(params))
-        self.token = self.page.get_token()
 
-        if self.page.no_operations():
+        if not self.page or self.page.no_operations():
             return
 
         # Sort by values dates (see comment in TransactionsPage.get_history)
@@ -166,7 +173,6 @@ class BanquePopulaire(Browser):
 
         while True:
             assert self.is_on_page(TransactionsPage)
-            self.token = self.page.get_token()
 
             for tr in self.page.get_history(account, coming):
                 yield tr
@@ -176,3 +182,29 @@ class BanquePopulaire(Browser):
                 return
 
             self.location(self.buildurl('/cyber/internet/Page.do', **next_params))
+
+    def get_investment(self, account):
+        if not account._invest_params:
+            raise NotImplementedError()
+
+        account = self.get_account(account.id)
+        params = account._invest_params
+        params['token'] = self.page.build_token(params['token'])
+        self.location('/cyber/internet/ContinueTask.do', urllib.urlencode(params))
+
+        if self.is_on_page(ErrorPage):
+            raise NotImplementedError()
+
+        url, params = self.page.get_investment_page_params()
+        if params:
+            self.location(url, urllib.urlencode(params))
+            if self.is_on_page(LineboursePage):
+                self.location('https://www.linebourse.fr/Portefeuille')
+                while self.is_on_page(MessagePage):
+                    self.page.skip()
+                    self.location('https://www.linebourse.fr/Portefeuille')
+            elif self.is_on_page(NatixisPage):
+                self.page.submit_form()
+            return self.page.get_investments()
+
+        return iter([])

@@ -381,7 +381,7 @@ class CsvPage(Page):
         for i, row in enumerate(reader):
             if self.HEADER and i+1 < self.HEADER:
                 continue
-            row = self.decode_row(row, encoding)
+            row = map(unicode.strip, self.decode_row(row, encoding))
             if header is None and self.HEADER:
                 header = row
             else:
@@ -411,6 +411,18 @@ class JsonPage(Page):
     @property
     def data(self):
         return self.response.text
+
+    def get(self, path):
+        node = self.doc
+        for name in filter(None, path.strip('.').split('.')):
+            node = node.get(name)
+            if node is None:
+                break
+        return node
+
+    def path(self, path, context=None):
+        from weboob.tools.json import mini_jsonpath
+        return mini_jsonpath(context or self.doc, path)
 
     def build_doc(self, text):
         from weboob.tools.json import json

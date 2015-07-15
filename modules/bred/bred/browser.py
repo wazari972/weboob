@@ -21,7 +21,7 @@ from datetime import date
 from decimal import Decimal
 
 from weboob.capabilities.bank import Account, Transaction
-from weboob.exceptions import BrowserIncorrectPassword, BrowserHTTPError
+from weboob.exceptions import BrowserIncorrectPassword, BrowserHTTPError, BrowserUnavailable
 from weboob.browser import DomainBrowser
 
 
@@ -44,6 +44,8 @@ class BredBrowser(DomainBrowser):
             raise BrowserIncorrectPassword('Bad login/password.')
         if 'gestion-des-erreurs/opposition' in self.url:
             raise BrowserIncorrectPassword('Your account is disabled')
+        if '/pages-gestion-des-erreurs/erreur-technique' in self.url:
+            raise BrowserUnavailable('A technical error occured')
 
     ACCOUNT_TYPES = {'000': Account.TYPE_CHECKING,
                      '999': Account.TYPE_MARKET,
@@ -53,6 +55,7 @@ class BredBrowser(DomainBrowser):
                      '080': Account.TYPE_SAVINGS,
                      '027': Account.TYPE_SAVINGS,
                      '037': Account.TYPE_SAVINGS,
+                     '730': Account.TYPE_DEPOSIT,
                     }
 
     def api_open(self, *args, **kwargs):

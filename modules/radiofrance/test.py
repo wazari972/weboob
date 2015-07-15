@@ -19,45 +19,59 @@
 
 
 from weboob.tools.test import BackendTest
-from weboob.capabilities.video import BaseVideo
+from weboob.capabilities.audio import BaseAudio
 from weboob.capabilities.radio import Radio
 
 
 class RadioFranceTest(BackendTest):
     MODULE = 'radiofrance'
 
-    def test_get_radios(self):
+    def test_ls_radios_and_selections(self):
         l = list(self.backend.iter_resources(objs=[Radio], split_path=[]))
+
         self.assertTrue(0 < len(l) < 30)
+        for radio in l:
+            name = radio.split_path[-1]
+            if name != 'francebleu':
+                streams = self.backend.get_radio(name).streams
+                self.assertTrue(len(streams) > 0)
+
+                l_sel = list(self.backend.iter_resources(objs=[BaseAudio], split_path=[name, 'selection']))
+                if len(l_sel) > 0:
+                    self.assertTrue(len(l_sel[0].url) > 0)
+
         l = list(self.backend.iter_resources(objs=[Radio], split_path=['francebleu']))
         self.assertTrue(len(l) > 30)
-        l = list(self.backend.iter_resources(objs=[BaseVideo], split_path=[]))
-        self.assertEquals(len(l), 0)
 
-    def test_get_video(self):
-        # this should be available up to 24/10/2014 15h00
-        urls = ('http://www.franceinter.fr/emission-vivre-avec-les-betes-y-arthus-bertrand-felins-g-tsai-s-envoler-conte-boreal-reha-hutin-30-m',
-            'http://www.franceinter.fr/player/reecouter?play=263735',
-            'franceinter-263735')
-        for url in urls:
-            vid = self.backend.get_video(url)
-            assert vid.id == urls[-1]
-        self.backend.fillobj(vid, ['url'])
-        assert vid.url.lower().endswith('.mp3')
+        for radio in l:
+            streams = self.backend.get_radio(radio.split_path[-1]).streams
+            self.assertTrue(len(streams) > 0)
 
-        # france culture (no expiration known)
-        vid = self.backend.get_video('http://www.franceculture.fr/emission-la-dispute-expositions-paul-strand-youssef-nabil-et-dorothee-smith-2012-02-01')
-        assert vid.id
-        self.backend.fillobj(vid, ['url'])
-        assert vid.url.lower().endswith('.mp3')
+            l_sel = list(self.backend.iter_resources(objs=[BaseAudio],
+                                                     split_path=['francebleu',
+                                                                 radio.split_path[-1],
+                                                                 'selection']))
+            if len(l_sel) > 0:
+                self.assertTrue(len(l_sel[0].url) > 0)
 
-        # fip (no expiration known)
-        # getting the proper ID is hard, hence the tests with many urls for the same content
-        urls = ('http://www.fipradio.fr/diffusion-club-jazzafip-du-13-mars',
-                'http://www.fipradio.fr/player/reecouter?play=20686',
-            'fip-20686')
-        for url in urls:
-            vid = self.backend.get_video(url)
-            assert vid.id == urls[-1]
-        self.backend.fillobj(vid, ['url'])
-        assert vid.url.lower().endswith('.mp3')
+    def test_podcasts(self):
+        for key, item in self.backend._RADIOS.iteritems():
+            if 'podcast' in item:
+                emissions = list(self.backend.iter_resources(objs=[BaseAudio], split_path=[key, 'podcasts']))
+                self.assertTrue(len(emissions) > 0)
+                podcasts = list(self.backend.iter_resources(objs=[BaseAudio], split_path=emissions[0].split_path))
+                self.assertTrue(len(podcasts) > 0)
+                podcast = self.backend.get_audio(podcasts[0].id)
+                self.assertTrue(podcast.url)
+
+    def test_search_radio(self):
+        l = list(self.backend.iter_radios_search('bleu'))
+        self.assertTrue(len(l) > 0)
+        self.assertTrue(len(l[0].streams) > 0)
+
+    def test_search_get_audio(self):
+        l = list(self.backend.search_audio('journal'))
+        self.assertTrue(len(l) > 0)
+
+        a = self.backend.get_audio(l[0].id)
+        self.assertTrue(a.url)

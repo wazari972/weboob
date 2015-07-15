@@ -28,6 +28,9 @@ from weboob.browser.filters.standard import CleanDecimal, CleanText, Date
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction
 
 
+class NetissimaPage(HTMLPage):
+    pass
+
 class Transaction(FrenchTransaction):
     pass
 
@@ -46,14 +49,34 @@ class TitrePage(LoggedPage, RawPage):
             _id = columns[0].split('{')[2]
             invest = Investment(_id)
             invest.label = unicode(columns[0].split('{')[-1])
-            invest.code = NotAvailable
+            invest.code = _id.split(':')[0]
             if ':' in _id:
                 invest.description = unicode(_id.split(':')[1])
-            invest.quantity = Decimal(FrenchTransaction.clean_amount(columns[1]))
-            invest.unitprice = Decimal(FrenchTransaction.clean_amount(columns[2]))
-            invest.unitvalue = Decimal(FrenchTransaction.clean_amount(columns[3]))
-            invest.valuation = Decimal(FrenchTransaction.clean_amount(columns[4]))
-            invest.diff = Decimal(FrenchTransaction.clean_amount(columns[5]))
+            quantity = FrenchTransaction.clean_amount(columns[1])
+            if quantity != '':
+                invest.quantity = Decimal(quantity)
+            else:
+                invest.quantity = NotAvailable
+            unitprice = FrenchTransaction.clean_amount(columns[2])
+            if unitprice != '':
+                invest.unitprice = Decimal(unitprice)
+            else:
+                invest.unitprice = NotAvailable
+            unitvalue = FrenchTransaction.clean_amount(columns[3])
+            if unitvalue != '':
+                invest.unitvalue = Decimal(unitvalue)
+            else:
+                invest.unitvalue = NotAvailable
+            valuation = FrenchTransaction.clean_amount(columns[4])
+            if valuation != '':
+                invest.valuation = Decimal(valuation)
+            else:
+                invest.valuation = NotAvailable
+            diff = FrenchTransaction.clean_amount(columns[5])
+            if diff != '':
+                invest.diff = Decimal(diff)
+            else:
+                invest.diff = NotAvailable
 
             yield invest
 

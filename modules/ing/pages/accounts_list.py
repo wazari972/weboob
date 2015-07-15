@@ -60,7 +60,9 @@ class AddType(Filter):
     types = {u'Courant': Account.TYPE_CHECKING, u'Livret A': Account.TYPE_SAVINGS,
              u'Orange': Account.TYPE_SAVINGS, u'Durable': Account.TYPE_SAVINGS,
              u'Titres': Account.TYPE_MARKET, u'PEA': Account.TYPE_MARKET,
-             u'Direct Vie': Account.TYPE_LIFE_INSURANCE}
+             u'Direct Vie': Account.TYPE_LIFE_INSURANCE,
+             u'Assurance Vie': Account.TYPE_LIFE_INSURANCE
+            }
 
     def filter(self, label):
         for key, acc_type in self.types.items():
@@ -222,6 +224,10 @@ class AccountsList(LoggedPage, HTMLPage):
                 return (self.obj.unitvalue / (1 + percent/Decimal('100.0'))).quantize(Decimal('1.00'))
 
             def obj_diff(self):
+                if not self.obj.quantity:
+                    # Quantity of euro funds is null.
+                    return Decimal('0.00')
+
                 return (self.obj.valuation - (self.obj.quantity * self.obj.unitprice)).quantize(Decimal('1.00'))
 
             def validate(self, obj):

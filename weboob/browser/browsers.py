@@ -96,6 +96,11 @@ class Browser(object):
     Saved state variables.
     """
 
+    ALLOW_REFERRER = True
+    """
+    Controls the behavior of get_referrer.
+    """
+
     @classmethod
     def asset(cls, localfile):
         """
@@ -195,11 +200,14 @@ class Browser(object):
         else:
             self.logger.info(msg)
 
+    def _create_session(self):
+        return FuturesSession(max_workers=self.MAX_WORKERS, max_retries=self.MAX_RETRIES)
+
     def _setup_session(self, profile):
         """
         Set up a python-requests session for our usage.
         """
-        session = FuturesSession(max_workers=self.MAX_WORKERS, max_retries=self.MAX_RETRIES)
+        session = self._create_session()
 
         session.proxies = self.PROXIES
 
@@ -338,10 +346,8 @@ class Browser(object):
                                      verify=verify,
                                      cert=cert,
                                      proxies=proxies,
-                                     background_callback=async and inner_callback)
-        if not async:
-            inner_callback(self, response)
-
+                                     callback=inner_callback,
+                                     async=async)
         return response
 
     def async_open(self, url, **kwargs):
@@ -451,6 +457,11 @@ class Browser(object):
 
         Reference: https://en.wikipedia.org/wiki/HTTP_referer
 
+        The behavior can be controlled through the ALLOW_REFERRER attribute.
+        True always allows the referers
+        to be sent, False never, and None only if it is within
+        the same domain.
+
         :param oldurl: Current absolute URL
         :type oldurl: str or None
 
@@ -459,21 +470,21 @@ class Browser(object):
 
         :rtype: str or None
         """
+        if self.ALLOW_REFERRER is False:
+            return
         if oldurl is None:
-            return None
+            return
         old = urlparse(oldurl)
         new = urlparse(newurl)
         # Do not leak secure URLs to insecure URLs
         if old.scheme == 'https' and new.scheme != 'https':
-            return None
+            return
         # Reloading the page. Usually no referrer.
         if oldurl == newurl:
-            return None
-        # TODO maybe implement some *optional* privacy features:
-        # * do not leak referrer to other domains (often breaks websites)
-        # * send a fake referrer (root of the current domain)
-        # * never send the referrer
-        # Inspired by the RefControl Firefox addon.
+            return
+        # Domain-based privacy
+        if self.ALLOW_REFERRER is None and old.netloc != new.netloc:
+            return
         return oldurl
 
 

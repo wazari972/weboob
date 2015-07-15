@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
-from urlparse import urlparse, parse_qs
 import re
 
 from weboob.capabilities import NotAvailable
@@ -25,7 +24,7 @@ from weboob.capabilities.bank import Account
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction
 
 from weboob.exceptions import BrowserIncorrectPassword
-from weboob.browser.elements import ListElement, ItemElement, SkipItem, method
+from weboob.browser.elements import ListElement, ItemElement, method
 from weboob.browser.pages import HTMLPage, LoggedPage, pagination
 from weboob.browser.filters.standard import Filter, Env, CleanText, CleanDecimal, Field, DateGuesser, TableCell
 from weboob.browser.filters.html import Link
@@ -72,33 +71,14 @@ class AccountsPage(LoggedPage, HTMLPage):
                 def filter(self, label):
                     return Account.TYPE_UNKNOWN
 
-            obj_id = Env('id')
+            obj_id = CleanText('./td[2]', replace=[('.', ''), (' ', '')])
             obj_label = Label(CleanText('./td[1]/a'))
             obj_coming = Env('coming')
-            obj_balance = Env('balance')
-            obj_currency = FrenchTransaction.Currency('./td[2] | ./td[3]')
+            obj_balance = CleanDecimal('./td[3]', replace_dots=True)
+            obj_currency = FrenchTransaction.Currency('./td[3]')
             obj__link_id = Link('./td[1]/a')
             obj_type = Type(Field('label'))
-
-            def parse(self, el):
-                link = el.xpath('./td[1]/a')[0].get('href', '')
-                url = urlparse(link)
-                p = parse_qs(url.query)
-
-                if 'CPT_IdPrestation' in p:
-                    id = p['CPT_IdPrestation'][0]
-                elif 'Ass_IdPrestation' in p:
-                    id = p['Ass_IdPrestation'][0]
-                elif 'CB_IdPrestation' in p:
-                    id = p['CB_IdPrestation'][0]
-                else:
-                    raise SkipItem()
-
-                balance = CleanDecimal('./td[3]', replace_dots=True)(self)
-
-                self.env['id'] = id
-                self.env['balance'] = balance
-                self.env['coming'] = NotAvailable
+            obj_coming = NotAvailable
 
 
 class Pagination(object):
@@ -144,8 +124,21 @@ class CPTOperationPage(LoggedPage, HTMLPage):
                 op._coming = (re.match(r'\d+/\d+/\d+', m.group(2)) is None)
                 yield op
 
+class AppGonePage(HTMLPage):
+    def on_load(self):
+        self.browser.app_gone = True
+        self.logger.info('Application has gone. Relogging...')
+        self.browser.do_logout()
+        self.browser.do_login()
+
 
 class LoginPage(HTMLPage):
+    @property
+    def logged(self):
+        if self.doc.xpath(u'//p[contains(text(), "You are now being redirected to your Personal Internet Banking.")]'):
+            return True
+        return False
+
     def on_load(self):
         for message in self.doc.getroot().cssselect('div.csPanelErrors'):
             raise BrowserIncorrectPassword(CleanText('.')(message))

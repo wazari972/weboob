@@ -23,7 +23,7 @@ from dateutil.relativedelta import relativedelta
 
 from weboob.deprecated.browser import Browser, BrowserIncorrectPassword
 
-from .pages import LoginPage, AccountPage, UselessPage, HomePage, ProHistoryPage, PartHistoryPage, HistoryDetailsPage
+from .pages import LoginPage, AccountPage, UselessPage, HomePage, ProHistoryPage, PartHistoryPage, HistoryDetailsPage, ErrorPage
 
 
 __all__ = ['Paypal']
@@ -46,17 +46,19 @@ class Paypal(Browser):
         '/cgi-bin/webscr\?cmd=_account.*$':             UselessPage,
         '/cgi-bin/webscr\?cmd=_login-done.+$':          UselessPage,
         '/cgi-bin/webscr\?cmd=_home&country_lang.x=true$': HomePage,
+        '/auth/validatecaptcha$':                       ErrorPage,
         'https://\w+.paypal.com/cgi-bin/webscr\?cmd=_history-details-from-hub&id=[A-Z0-9]+$': HistoryDetailsPage,
         'https://\w+.paypal.com/webapps/business/\?nav=0.0': HomePage,
         'https://\w+.paypal.com/webapps/business/\?country_lang.x=true': HomePage,
         'https://\w+.paypal.com/myaccount/\?nav=0.0': HomePage,
         'https://\w+.paypal.com/businessexp/money': AccountPage,
+        'https://\w+.paypal.com/businessexp/summary': ProHistoryPage,
         'https://\w+.paypal.com/webapps/business/activity\?.*': ProHistoryPage,
         'https://\w+.paypal.com/myaccount/activity/.*': (PartHistoryPage, 'json'),
-        'https://\w+.paypal.com/myaccount/': ProHistoryPage,
+        'https://\w+.paypal.com/myaccount/': HomePage,
     }
 
-    DEFAULT_TIMEOUT = 60
+    DEFAULT_TIMEOUT = 120
 
     BEGINNING = datetime.date(1998, 6, 1)  # The day PayPal was founded
     account_type = None
@@ -72,8 +74,11 @@ class Paypal(Browser):
             self.location('/myaccount')
             self.account_type = "perso"
         else:
-            self.location('/webapps/business/?nav=0.0')
-            if self.is_on_page(HomePage):
+            if not self.page or self.page.document.xpath('.//a[contains(@class, "try-now-bttn")]'):
+                raise BrowserIncorrectPassword("Please update your account to the new PayPal website to continue to use our services")
+            else:
+                self.location('/webapps/business/?nav=0.0')
+            if self.is_on_page(ProHistoryPage):
                 self.account_type = "pro"
             else:
                 self.account_type = "perso"
@@ -95,7 +100,7 @@ class Paypal(Browser):
         self.page.login(self.username, self.password)
         self.page.validate_useless_captacha()
 
-        if self.is_on_page(LoginPage):
+        if self.is_on_page(LoginPage) or self.is_on_page(ErrorPage):
             raise BrowserIncorrectPassword()
 
         self.find_account_type()
@@ -114,7 +119,7 @@ class Paypal(Browser):
 
     def get_download_history(self, account, step_min=None, step_max=None):
         if step_min is None and step_max is None:
-            step_min = 30
+            step_min = 10
             step_max = 180
 
         def fetch_fn(start, end):
@@ -135,13 +140,13 @@ class Paypal(Browser):
         Fetches transactions in small chunks to avoid request timeouts.
         Time period of each requested chunk is adjusted dynamically.
         """
-        FACTOR = 2
+        FACTOR = 1.5
         step = step_min
         while end > beginning:
             start = end - datetime.timedelta(step)
             chunk = list(fetch_fn(start, end))
             end = start - datetime.timedelta(1)
-            if len(chunk) > 50:
+            if len(chunk) > 40:
                 # If there're too much transactions in current period, decrease
                 # the period.
                 step = max(step_min, step/FACTOR)

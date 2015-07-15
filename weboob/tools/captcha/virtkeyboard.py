@@ -20,7 +20,6 @@
 
 import hashlib
 import tempfile
-from string import maketrans
 
 try:
     from PIL import Image
@@ -141,11 +140,18 @@ class VirtKeyboard(object):
                     s += " "
         return hashlib.md5(s).hexdigest()
 
-    def get_symbol_code(self, md5sum):
-        for i in self.md5:
-            if md5sum == self.md5[i]:
-                return i
-        raise VirtKeyboardError('Symbol not found')
+    def get_symbol_code(self, md5sum_list):
+        if isinstance(md5sum_list, basestring):
+            md5sum_list = [md5sum_list]
+
+        for md5sum in md5sum_list:
+            for i in self.md5:
+                if md5sum == self.md5[i]:
+                    return i
+        raise VirtKeyboardError('Symbol not found for hash "%s".' % md5sum)
+
+    def get_string_code(self, string):
+        return ''.join((self.get_symbol_code(self.symbols[c]) for c in string))
 
     def check_symbols(self, symbols, dirname):
         # symbols: dictionary <symbol>:<md5 value>
@@ -229,11 +235,3 @@ class GridVirtKeyboard(VirtKeyboard):
         super(GridVirtKeyboard, self).__init__()
 
         self.load_symbols(coords)
-
-    def load_symbols(self, coords):
-        super(GridVirtKeyboard, self).load_symbols(coords)
-        symbol_codes = map(self.get_symbol_code, self.symbols.itervalues())
-        self._trans = maketrans(''.join(self.symbols), ''.join(symbol_codes))
-
-    def get_string_code(self, string):
-        return str(string).translate(self._trans)

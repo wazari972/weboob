@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright(C) 2010-2011 Christophe Benz
+# Copyright(C) 2015      Matthieu Weber
 #
 # This file is part of weboob.
 #
@@ -18,18 +18,15 @@
 # along with weboob. If not, see <http://www.gnu.org/licenses/>.
 
 
-from weboob.deprecated.browser import Page
+from weboob.browser import PagesBrowser, URL
+
+from .pages import SearchPage
 
 
-class LoginPage(Page):
-    def login(self, login, password):
-        self.browser.select_form(name='code')
-        self.browser['j_username'] = login
-        self.browser['j_password'] = password
-        self.browser.submit()
+class DPDBrowser(PagesBrowser):
+    BASEURL = 'https://tracking.dpd.de/'
 
+    search_page = URL('/cgi-bin/simpleTracking.cgi\?parcelNr=(?P<id>.+)&locale=en_D2&type=1', SearchPage)
 
-class LoginSASPage(Page):
-    def login(self):
-        self.browser.select_form(name='redirect')
-        self.browser.submit()
+    def get_tracking_info(self, _id):
+        return self.search_page.go(id=_id).get_info(_id)

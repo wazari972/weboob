@@ -23,7 +23,7 @@ import re
 from weboob.browser.browsers import DomainBrowser
 from weboob.browser.profiles import IPhone
 from weboob.browser.pages import HTMLPage
-from weboob.exceptions import BrowserIncorrectPassword
+from weboob.exceptions import BrowserIncorrectPassword, ParseError
 from weboob.tools.json import json
 
 
@@ -34,6 +34,7 @@ class FacebookBrowser(DomainBrowser):
     BASEURL = 'https://graph.facebook.com'
 
     CLIENT_ID = "247294518656661"
+    PROFILE = IPhone('Happn/3.0.2')
     access_token = None
     info = None
 
@@ -50,19 +51,15 @@ class FacebookBrowser(DomainBrowser):
 
         self.location(self.response.headers['Location'])
 
-        params = {}
-        for inp in re.findall(r'input [^>]*type=\\"hidden\\" [^>]*>', self.response.text, re.MULTILINE):
-            m = re.search(r'name=\\"([^"]+)\\"', inp)
-            m2 = re.search(r'value=\\"([^"]+)\\"', inp)
-            params[m.group(1)] = m2.group(1).replace('\\', '') if m2 else ''
-        params['__CONFIRM__'] = 1
-        m = re.search(r'rel=\\"async\\" ajaxify=\\"([^"]+)\\"', self.response.text, re.MULTILINE)
-        if m:
-            uri = m.group(1).replace('\\', '')
-        self.location(uri, data=params)
+        page = HTMLPage(self, self.response)
+        form = page.get_form(nr=0, submit='//input[@value="OK"]')
+        form.submit()
+
         m = re.search('access_token=([^&]+)&', self.response.text)
         if m:
             self.access_token = m.group(1)
+        else:
+            raise ParseError('Unable to find access_token')
 
         self.info = self.request('/me')
 
@@ -112,7 +109,7 @@ class HappnBrowser(DomainBrowser):
         return self.request('/api/users/me/conversations')['data']
 
     def get_thread(self, id):
-        r = self.request('/api/users/me/conversations/%s?fields=id,messages.fields(id,message,creation_date,sender.fields(id)),participants.fields(user.fields(birth_date,first_name,last_name,display_name,login,credits,referal,matching_preferences,notification_settings,unread_conversations,about,is_accepted,age,job,workplace,school,modification_date,profiles.mode(0).width(1000).height(1000).fields(url,width,height,mode),last_meet_position,my_relation,is_charmed,distance,gender))' % id)['data']
+        r = self.request('/api/users/me/conversations/%s?fields=id,messages.limit(100).fields(id,message,creation_date,sender.fields(id)),participants.fields(user.fields(birth_date,first_name,last_name,display_name,login,credits,referal,matching_preferences,notification_settings,unread_conversations,about,is_accepted,age,job,workplace,school,modification_date,profiles.mode(0).width(1000).height(1000).fields(url,width,height,mode),last_meet_position,my_relation,is_charmed,distance,gender))' % id)['data']
         return r
 
     def post_message(self, thread_id, content):
