@@ -22,9 +22,10 @@ import time
 
 from weboob.browser import LoginBrowser, URL, need_login
 from weboob.exceptions import BrowserIncorrectPassword, ParseError
-from weboob.capabilities.bank import Account, TransferError
+from weboob.capabilities.bank import Account, TransferError, AccountNotFound
+from weboob.capabilities.base import find_object
 
-from .pages import AccountsList, LoginPage, TitrePage, TitreHistory,\
+from .pages import AccountsList, LoginPage, NetissimaPage, TitrePage, TitreHistory,\
     TransferPage, TransferConfirmPage, BillsPage, StopPage, TitreDetails
 
 
@@ -55,6 +56,7 @@ class IngBrowser(LoginBrowser):
     valtransferpage = URL('/protected/pages/cc/transfer/create/transferCreateValidation.jsf', TransferConfirmPage)
     titredetails = URL('/general\?command=display.*', TitreDetails)
     # CapBank-Market
+    netissima = URL('/data/asv/fiches-fonds/fonds-netissima.html', NetissimaPage)
     starttitre = URL('/general\?command=goToAccount&zone=COMPTE', TitrePage)
     titrepage = URL('https://bourse.ingdirect.fr/priv/portefeuille-TR.php', TitrePage)
     titrehistory = URL('https://bourse.ingdirect.fr/priv/compte.php\?ong=3', TitreHistory)
@@ -93,6 +95,9 @@ class IngBrowser(LoginBrowser):
         self.where = "start"
         return self.page.get_list()
 
+    def get_account(self, _id):
+        return find_object(self.get_accounts_list(), id=_id, error=AccountNotFound)
+
     @need_login
     @check_bourse
     def get_coming(self, account):
@@ -100,7 +105,7 @@ class IngBrowser(LoginBrowser):
                 account.type != Account.TYPE_SAVINGS:
             raise NotImplementedError()
         if self.where != "start":
-            self.accountspage.go()
+            account = self.get_account(account.id)
         data = {"AJAX:EVENTS_COUNT": 1,
                 "AJAXREQUEST": "_viewRoot",
                 "ajaxSingle": "index:setAccount",
@@ -131,7 +136,7 @@ class IngBrowser(LoginBrowser):
             raise NotImplementedError()
 
         if self.where != "start":
-            self.accountspage.go()
+            account = self.get_account(account.id)
         data = {"AJAX:EVENTS_COUNT": 1,
                 "AJAXREQUEST": "_viewRoot",
                 "ajaxSingle": "index:setAccount",
@@ -220,8 +225,7 @@ class IngBrowser(LoginBrowser):
 
 
     def go_investments(self, account):
-        if self.where != "start":
-            self.accountspage.go()
+        account = self.get_account(account.id)
         data = {"AJAX:EVENTS_COUNT": 1,
                 "AJAXREQUEST": "_viewRoot",
                 "ajaxSingle": "index:setAccount",
@@ -241,7 +245,9 @@ class IngBrowser(LoginBrowser):
                 if i > 1:
                     self.do_logout()
                     self.do_login()
-                    self.accountspage.go()
+                    account = self.get_account(account.id)
+                    data['cptnbr'] = account._id
+                    data['javax.faces.ViewState'] = account._jid
 
             self.accountspage.go(data=data)
 

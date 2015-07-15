@@ -20,7 +20,7 @@
 
 import datetime
 
-from weboob.browser.pages import HTMLPage, LoggedPage, pagination
+from weboob.browser.pages import HTMLPage, pagination
 from weboob.browser.elements import ListElement, ItemElement, method
 from weboob.browser.filters.standard import CleanText, CleanDecimal, Regexp, DateGuesser, Env
 from weboob.browser.filters.html import Link
@@ -41,11 +41,19 @@ class LoginPage(HTMLPage):
         form.submit()
 
 
+class CMSOPage(HTMLPage):
+    @property
+    def logged(self):
+        if len(self.doc.xpath('//b[text()="Session interrompue"]')) > 0:
+            return False
+        return True
+
+
 class CmsoListElement(ListElement):
     item_xpath = '//table[@class="Tb" and tr[1][@class="LnTit"]]/tr[@class="LnA" or @class="LnB"]'
 
 
-class AccountsPage(LoggedPage, HTMLPage):
+class AccountsPage(CMSOPage):
     @method
     class iter_accounts(CmsoListElement):
         class item(ItemElement):
@@ -69,7 +77,7 @@ class CmsoTransactionElement(ItemElement):
         return len(self.el) >= 5 and not self.el.get('id', '').startswith('libelleLong')
 
 
-class HistoryPage(LoggedPage, HTMLPage):
+class HistoryPage(CMSOPage):
     def iter_history(self, *args, **kwargs):
         if self.doc.xpath('//a[@href="1-situationGlobaleProfessionnel.act"]'):
             return self.iter_history_rest_page(*args, **kwargs)
@@ -90,6 +98,9 @@ class HistoryPage(LoggedPage, HTMLPage):
             obj_raw = Transaction.Raw('./following-sibling::tr[1][starts-with(@id, "libelleLong")]/td[3]')
             obj_amount = Transaction.Amount('./td[5]', './td[4]')
 
+            def condition(self):
+                return len(self.el) >= 5 and not self.el.get('id', '').startswith('libelleLong') and len(self.el.xpath('.//i')) > 0
+
     @pagination
     @method
     class iter_history_rest_page(CmsoListElement):
@@ -99,4 +110,4 @@ class HistoryPage(LoggedPage, HTMLPage):
             obj_date = Transaction.Date('./td[2]')
             obj_vdate = Transaction.Date('./td[1]')
             obj_raw = Transaction.Raw('./td[3]')
-            obj_amount = Transaction.Amount('./td[5]', './td[4]', replace_dots=False)
+            obj_amount = Transaction.Amount('./td[5]', './td[4]')

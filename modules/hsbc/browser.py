@@ -24,7 +24,7 @@ from datetime import timedelta
 from weboob.tools.date import LinearDateGuesser
 from weboob.exceptions import BrowserIncorrectPassword
 from weboob.browser import LoginBrowser, URL, need_login
-from .pages import AccountsPage, CBOperationPage, CPTOperationPage, LoginPage
+from .pages import AccountsPage, CBOperationPage, CPTOperationPage, LoginPage, AppGonePage
 
 
 __all__ = ['HSBC']
@@ -32,19 +32,30 @@ __all__ = ['HSBC']
 
 class HSBC(LoginBrowser):
     BASEURL = 'https://client.hsbc.fr'
+    app_gone = False
 
     connection =      URL(r'https://www.hsbc.fr/1/2/hsbc-france/particuliers/connexion', LoginPage)
     login =           URL(r'https://www.hsbc.fr/1/*', LoginPage)
-    cptPage =         URL(r'/cgi-bin/emcgi.*\&CPT_IdPrestation.*',
+    cptPage =         URL(r'/cgi-bin/emcgi.*\&Cpt=.*',
+                          r'/cgi-bin/emcgi.*\&Epa=.*',
+                          r'/cgi-bin/emcgi.*\&CPT_IdPrestation.*',
                           r'/cgi-bin/emcgi.*\&Ass_IdPrestation.*',
                           CPTOperationPage)
-    cbPage =          URL(r'/cgi-bin/emcgi.*\&CB_IdPrestation.*',
+    cbPage =          URL(r'/cgi-bin/emcgi.*\&Cb=.*',
+                          r'/cgi-bin/emcgi.*\&CB_IdPrestation.*',
                           CBOperationPage)
+    appGone =     URL(r'/.*_absente.html',
+                      r'/pm_absent_inter.html',
+                        AppGonePage)
     accounts =        URL(r'/cgi-bin/emcgi', AccountsPage)
 
     def __init__(self, username, password, secret, *args, **kwargs):
+        self.accounts_list = dict()
         self.secret = secret
         LoginBrowser.__init__(self, username, password, *args, **kwargs)
+
+    def load_state(self, state):
+        return
 
     def prepare_request(self, req):
         preq = super(HSBC, self).prepare_request(req)
@@ -54,11 +65,8 @@ class HSBC(LoginBrowser):
 
         return preq
 
-    def home(self):
-        return self.login.go()
-
     def do_login(self):
-        self.connection.stay_or_go()
+        self.connection.go()
         self.page.login(self.username)
 
         no_secure_key_link = self.page.get_no_secure_key()
@@ -70,19 +78,40 @@ class HSBC(LoginBrowser):
         self.page.useless_form()
 
         home_url = self.page.get_frame()
-        if not home_url:
+        if not home_url or not self.page.logged:
             raise BrowserIncorrectPassword()
         self.location(home_url)
 
     @need_login
     def get_accounts_list(self):
-        return self.accounts.stay_or_go().iter_accounts()
+        self.update_accounts_list()
+        for i,a in self.accounts_list.items():
+            yield a
+
+    @need_login
+    def update_accounts_list(self):
+        for a in list(self.accounts.stay_or_go().iter_accounts()):
+            try:
+                self.accounts_list[a.id]._link_id = a._link_id
+            except KeyError:
+                self.accounts_list[a.id] = a
 
     @need_login
     def get_history(self, account):
         if account._link_id is None:
             return
-        self.location(account._link_id)
+
+        if account._link_id.startswith('javascript') or '&Crd=' in account._link_id:
+            raise NotImplementedError()
+
+        self.location(self.accounts_list[account.id]._link_id)
+
+        #If we relogin on hsbc, all link have change
+        if self.app_gone:
+            self.app_gone = False
+            self.update_accounts_list()
+            self.location(self.accounts_list[account.id]._link_id)
+
 
         if self.page is None:
             return

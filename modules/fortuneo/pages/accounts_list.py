@@ -22,6 +22,10 @@ from lxml.html import etree
 from decimal import Decimal
 import re
 from time import sleep
+from datetime import date
+from dateutil.relativedelta import relativedelta
+
+from mechanize import FormNotFoundError
 
 from weboob.capabilities.bank import Account, Investment
 from weboob.deprecated.browser import Page, BrowserIncorrectPassword
@@ -83,10 +87,13 @@ class PeaHistoryPage(Page):
             yield inv
 
     def parse_decimal(self, string):
-        value = self.parser.tocleanstring(string)
+        value = Transaction.clean_amount(self.parser.tocleanstring(string))
         if value == '-':
             return NotAvailable
-        return Decimal(Transaction.clean_amount(value))
+        return Decimal(value)
+
+    def select_period(self):
+        return True
 
     def get_operations(self, _id):
         return iter([])
@@ -124,13 +131,43 @@ class InvestmentHistoryPage(Page):
             return NotAvailable
         return Decimal(Transaction.clean_amount(value))
 
+    def select_period(self):
+        self.browser.location(self.url.replace('portefeuille-assurance-vie.jsp', 'operations/assurance-vie-operations.jsp'))
+
+        try:
+            self.browser.select_form(name='OperationsForm')
+        except FormNotFoundError:
+            return False
+        self.browser.set_all_readonly(False)
+        self.browser['dateDebut'] = (date.today() - relativedelta(years=1)).strftime('%d/%m/%Y')
+        self.browser['nbrEltsParPage'] = '100'
+        self.browser.submit()
+        return True
+
     def get_operations(self, _id):
-        return iter([])
+        for tr in self.document.xpath('//table[@id="tableau_histo_opes"]/tbody/tr'):
+            tds = tr.findall('td')
+
+            t = Transaction()
+            t.parse(date=self.parser.tocleanstring(tds[1]),
+                    raw=self.parser.tocleanstring(tds[2]))
+            t.set_amount(self.parser.tocleanstring(tds[-1]))
+            yield t
 
 
 class AccountHistoryPage(Page):
     def get_investments(self):
         return iter([])
+
+    def select_period(self):
+        self.browser.select_form(name='ConsultationHistoriqueOperationsForm')
+        self.browser.set_all_readonly(False)
+        self.browser['dateRechercheDebut'] = (date.today() - relativedelta(years=1)).strftime('%d/%m/%Y')
+        self.browser['nbrEltsParPage'] = '100'
+        self.browser.submit()
+
+        return True
+
 
     def get_operations(self, _id):
         """history, see http://docs.weboob.org/api/capabilities/bank.html?highlight=transaction#weboob.capabilities.bank.Transaction"""
@@ -202,7 +239,9 @@ class AccountsList(Page):
 
     ACCOUNT_TYPES = {'mes-comptes/compte-courant':    Account.TYPE_CHECKING,
                      'mes-comptes/assurance-vie':     Account.TYPE_LIFE_INSURANCE,
-                     'mes-comptes/livret':            Account.TYPE_LOAN,
+                     'mes-comptes/livret':            Account.TYPE_SAVINGS,
+                     'mes-comptes/pea':               Account.TYPE_MARKET,
+                     'mes-comptes/compte-titres':     Account.TYPE_MARKET,
                     }
     def get_list(self):
         for cpt in self.document.xpath(".//*[@class='synthese_id_compte']"):

@@ -26,7 +26,17 @@ from weboob.deprecated.browser import Page, BrokenPageError
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction as Transaction
 
 
-class HomePage(Page):
+class BasePage(Page):
+    def get_error(self):
+        try:
+            error = self.document.xpath('//h1[@class="h1-erreur"]')[0]
+            self.logger.error('Error detected: %s', error.text_content().strip())
+            return error
+        except IndexError:
+            return None
+
+
+class HomePage(BasePage):
     def get_post_url(self):
         for script in self.document.xpath('//script'):
             text = script.text
@@ -40,7 +50,7 @@ class HomePage(Page):
         return None
 
 
-class LoginPage(Page):
+class LoginPage(BasePage):
     def login(self, password):
         imgmap = {}
         for td in self.document.xpath('//table[@id="pave-saisie-code"]/tr/td'):
@@ -59,15 +69,15 @@ class LoginPage(Page):
         return self.parser.tocleanstring(self.document.getroot())
 
 
-class UselessPage(Page):
+class UselessPage(BasePage):
     pass
 
 
-class LoginErrorPage(Page):
+class LoginErrorPage(BasePage):
     pass
 
 
-class _AccountsPage(Page):
+class _AccountsPage(BasePage):
     COL_LABEL    = 0
     COL_ID       = 2
     COL_VALUE    = 4
@@ -77,7 +87,10 @@ class _AccountsPage(Page):
              'LIV A':  Account.TYPE_SAVINGS,
              'LDD':    Account.TYPE_SAVINGS,
              'PEL':    Account.TYPE_MARKET,
+             'PEA':    Account.TYPE_MARKET,
+             'CPS':    Account.TYPE_MARKET,
              'TITR':   Account.TYPE_MARKET,
+             'TITR CTD':   Account.TYPE_MARKET,
             }
 
     def get_list(self):
@@ -87,7 +100,7 @@ class _AccountsPage(Page):
                 continue
 
             cols = tr.findall('td')
-            if not cols:
+            if not cols or len(cols) < 7:
                 continue
 
             account = Account()
@@ -136,7 +149,7 @@ class _AccountsPage(Page):
         return links
 
 
-class CardsPage(Page):
+class CardsPage(BasePage):
     def get_list(self):
         TABLE_XPATH = '//table[caption[@class="caption tdb-cartes-caption" or @class="ca-table caption"]]'
 
@@ -247,7 +260,8 @@ class SavingsPage(_AccountsPage):
     COL_ID       = 1
 
 
-class TransactionsPage(Page):
+
+class TransactionsPage(BasePage):
     def get_iban_url(self):
         for link in self.document.xpath('//a[contains(text(), "IBAN")]'):
             m = re.search("\('([^']+)'", link.get('href', ''))

@@ -54,9 +54,6 @@ class Album(BaseObject):
     thumbnail = Field('Image associated to the album', BaseImage)
     tracks_list = Field('list of tracks', list)
 
-    def __init__(self, _id):
-        BaseObject.__init__(self, unicode("album.%s" % _id))
-
     @classmethod
     def decode_id(cls, _id):
         if _id:
@@ -72,9 +69,6 @@ class Playlist(BaseObject):
     """
     title = StringField('playlist name')
     tracks_list = Field('list of tracks', list)
-
-    def __init__(self, _id):
-        BaseObject.__init__(self, unicode("playlist.%s" % _id))
 
     @classmethod
     def decode_id(cls, _id):
@@ -93,9 +87,6 @@ class BaseAudio(BaseFile):
     bitrate =   Field('file bit rate in Kbps', int)
     format =    StringField('file format')
     thumbnail = Field('Image associated to the file', BaseImage)
-
-    def __init__(self, _id):
-        BaseFile.__init__(self, unicode("audio.%s" % _id))
 
     @classmethod
     def decode_id(cls, _id):

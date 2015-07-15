@@ -28,7 +28,7 @@ __all__ = ['BNPEnterprise']
 class BNPEnterprise(Browser):
     DOMAIN = 'entreprises.bnpparibas.net'
     PROTOCOL = 'https'
-    CERTHASH = '6789f1e08e18d6578dca88ce2e0354a99dbe7824736c01c9c4fa3b456d03b9e9'
+    CERTHASH = 'e0569d214f9f95a574baa8b9f189da42922bfded21d614fed43cdb21adb44999'
 
     PAGES = {'%s://%s/NSAccess.*' % (PROTOCOL, DOMAIN): LoginPage,
              '%s://%s/UNE\?.*' % (PROTOCOL, DOMAIN): AccountsPage,
@@ -108,3 +108,6 @@ class BNPEnterprise(Browser):
         for tr in self._get_history('/RLOPI?chC=%s&ch8=0000&chB=1&ch7=%s&ch9=%s' % (account.id, d1, d2)):
             if tr._coming:
                 yield tr
+
+    def iter_investment(self, account):
+        raise NotImplementedError()

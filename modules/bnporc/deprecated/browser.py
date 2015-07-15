@@ -21,12 +21,14 @@
 import urllib
 from datetime import datetime
 from logging import warning
+from random import randint
 
 from weboob.deprecated.browser import Browser, BrowserIncorrectPassword, BrowserPasswordExpired
-from weboob.capabilities.bank import TransferError, Transfer
+from weboob.capabilities.bank import TransferError, Transfer, Account
 
 from .perso.accounts_list import AccountsList, AccountPrelevement
 from .perso.transactions import AccountHistory, AccountComing
+from .perso.investment import AccountMarketInvestment, AccountLifeInsuranceInvestment
 from .perso.transfer import TransferPage, TransferConfirmPage, TransferCompletePage
 from .perso.login import LoginPage, ConfirmPage, ChangePasswordPage, InfoMessagePage
 from .perso.messages import MessagePage, MessagesPage
@@ -44,6 +46,8 @@ class BNPorc(Browser):
     PAGES = {'.*pageId=unedescomptes.*':                    AccountsList,
              '.*pageId=releveoperations.*':                 AccountHistory,
              '.*FicheA':                                    AccountHistory,
+             '.*SAF_DPF.*':                                 AccountMarketInvestment,
+             '.*identifiant=Assurance_Vie_Consultation.*':  AccountLifeInsuranceInvestment,
              '.*Action=SAF_CHM.*':                          ChangePasswordPage,
              '.*pageId=mouvementsavenir.*':                 AccountComing,
              '.*NS_AVEDP.*':                                AccountPrelevement,
@@ -148,6 +152,9 @@ class BNPorc(Browser):
         return None
 
     def iter_history(self, account):
+        if account.type == Account.TYPE_LIFE_INSURANCE:
+            raise NotImplementedError()
+
         if account._link_id is None:
             return iter([])
 
@@ -177,7 +184,10 @@ class BNPorc(Browser):
 
             self.location('https://www.secure.bnpparibas.net/banque/portail/particulier/FicheA', urllib.urlencode(data))
 
-            execution = self.page.document.xpath('//form[@name="displayStatementForm"]/input[@name="_flowExecutionKey"]')[0].attrib['value']
+            e = self.page.document.xpath('//form[@name="displayStatementForm"]/input[@name="_flowExecutionKey"]')
+            if len(e) != 1:
+                return iter([])
+            execution = e[0].attrib['value']
             data = {'_eventId':                  'changeOperationsPerPage',
                     'newCategoryId':             '',
                     'categorisationInProgress':  '',
@@ -228,6 +238,35 @@ class BNPorc(Browser):
             self.location('https://www.secure.bnpparibas.net/banque/portail/particulier/FicheA', urllib.urlencode(data))
 
         return self.page.iter_coming_operations()
+
+    def iter_investment(self, account):
+        if account.type == Account.TYPE_MARKET:
+            if not account.iban or u'espèce' in account.label.lower():
+                return iter([])
+
+            stp = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
+            self.location('https://www.secure.bnpparibas.net/SAF_DPF?Origine=DSP_DPF&ch4=' + account.iban + 'stp=' + stp)
+
+            data = {'ch4': account.iban,
+                    'Origine': 'DSP_DPF',
+                    'chD': 'oui',
+                    'chT': 'sans',
+                    'chU': 'alpha',
+                    'x': randint(0, 99),
+                    'y': randint(0, 18)
+                   }
+            self.location('https://www.secure.bnpparibas.net/SAF_DPF', urllib.urlencode(data))
+
+        elif account.type == Account.TYPE_LIFE_INSURANCE:
+            if not account._link_id:
+                return iter([])
+
+            self.location('https://www.secure.bnpparibas.net/banque/portail/particulier/Fiche?type=folder&identifiant=Assurance_Vie_Consultation_20071002051044&contrat=' + account._link_id)
+
+        else:
+            raise NotImplementedError()
+
+        return self.page.iter_investment()
 
     @check_expired_password
     def get_transfer_accounts(self):

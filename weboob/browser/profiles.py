@@ -72,8 +72,35 @@ class Firefox(Profile):
             'Accept-Language': 'en-us,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:31.0) Gecko/20100101 Firefox/31.0',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0',
             'DNT': '1'}
+
+
+class GoogleBot(Profile):
+    """
+    Try to mimic Googlebot.
+    Keep in mind there are ways to authenticate real Googlebot IPs.
+
+    You will most likely want to set ALLOW_REFERRER to False.
+    """
+
+    def setup_session(self, session):
+        """
+        Set up headers for a standard Firefox request
+        (except for DNT which isn't on by default but is a good idea).
+
+        The goal is to be unidentifiable.
+        """
+        # Replace all base requests headers
+        # http://googlewebmastercentral.blogspot.com/2008/03/first-date-with-googlebot-headers-and.html
+        # Cached versions of:
+        #  http://request.urih.com/
+        #  http://xhaus.com/headers
+        session.headers = {
+            'Accept-Encoding': 'gzip,deflate',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'From': 'googlebot(at)googlebot.com',
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'}
 
 
 class Wget(Profile):
@@ -105,6 +132,7 @@ class Android(Profile):
         """
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Linux; U; Android 4.0.3; fr-fr; LG-L160L Build/IML74K) AppleWebkit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'})
+
 
 class IPhone(Profile):
     def __init__(self, application):

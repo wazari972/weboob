@@ -23,7 +23,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse, parse_qs
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import re
 from dateutil.relativedelta import relativedelta
 
@@ -31,7 +31,7 @@ from weboob.browser.pages import HTMLPage, FormNotFound, LoggedPage
 from weboob.browser.elements import ListElement, ItemElement, SkipItem, method
 from weboob.browser.filters.standard import Filter, Env, CleanText, CleanDecimal, Field, TableCell
 from weboob.browser.filters.html import Link
-from weboob.exceptions import BrowserIncorrectPassword
+from weboob.exceptions import BrowserIncorrectPassword, ParseError
 from weboob.capabilities import NotAvailable
 from weboob.capabilities.bank import Account
 from weboob.tools.capabilities.bank.transactions import FrenchTransaction
@@ -42,7 +42,7 @@ class LoginPage(HTMLPage):
     REFRESH_MAX = 10.0
 
     def login(self, login, passwd):
-        form = self.get_form(nr=0)
+        form = self.get_form(xpath='//form[contains(@name, "ident")]')
         form['_cm_user'] = login
         form['_cm_pwd'] = passwd
         form.submit()
@@ -133,7 +133,7 @@ class AccountsPage(LoggedPage, HTMLPage):
                     return Account.TYPE_UNKNOWN
 
             obj_id = Env('id')
-            obj_label = Label(CleanText('./td[1]/a'))
+            obj_label = Label(CleanText('./td[1]/a/node()[not(contains(@class, "doux"))]'))
             obj_coming = Env('coming')
             obj_balance = Env('balance')
             obj_currency = FrenchTransaction.Currency('./td[2] | ./td[3]')
@@ -148,11 +148,20 @@ class AccountsPage(LoggedPage, HTMLPage):
 
                 url = urlparse(link)
                 p = parse_qs(url.query)
-                if 'rib' not in p:
+                if 'rib' not in p and 'webid' not in p:
                     raise SkipItem()
 
-                balance = CleanDecimal('./td[2] | ./td[3]', replace_dots=True)(self)
-                id = p['rib'][0]
+                for td in el.xpath('./td[2] | ./td[3]'):
+                    try:
+                        balance = CleanDecimal('.', replace_dots=True)(td)
+                    except InvalidOperation:
+                        continue
+                    else:
+                        break
+                else:
+                    raise ParseError('Unable to find balance for account %s' % CleanText('./td[1]/a')(el))
+
+                id = p['rib'][0] if 'rib' in p else p['webid'][0]
 
                 # Handle cards
                 if id in self.parent.objects:
