@@ -44,6 +44,11 @@ class FacebookBrowser(DomainBrowser):
         form['email'] = username
         form['pass'] = password
         form['persistent'] = 1
+        for script in page.doc.xpath('//script'):
+            m = re.search('"_js_datr","([^"]+)"', script.text or '')
+            if m:
+                self.session.cookies.set('_js_datr', m.group(1))
+
         form.submit(allow_redirects=False)
         if 'Location' not in self.response.headers:
             raise BrowserIncorrectPassword()
@@ -97,7 +102,7 @@ class TinderBrowser(APIBrowser):
         if len(self.recs) == 0:
             self.update_recs()
         if len(self.recs) == 0:
-            return
+            return 60
 
         profile = self.recs.pop()
 
